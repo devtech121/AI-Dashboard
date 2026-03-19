@@ -1,0 +1,501 @@
+order_id,order_date,customer_id,product_category,product_name,quantity,unit_price,discount_pct,region,payment_method,rating,returned,revenue
+1001,2023-01-01,202,Clothing,Novel,4,482.9,15,West,Credit Card,3.1,0,1641.86
+1002,2023-01-02,370,Clothing,Yoga Mat,1,12.41,0,North,Debit Card,3.3,0,12.41
+1003,2023-01-03,206,Home,Perfume,4,476.38,15,North,Credit Card,4.6,0,1619.69
+1004,2023-01-04,171,Electronics,T-Shirt,5,323.16,20,South,Credit Card,4.3,0,1292.64
+1005,2023-01-05,288,Sports,Novel,1,435.27,10,East,Credit Card,2.7,0,391.74
+1006,2023-01-06,120,Beauty,Blender,5,232.81,20,West,PayPal,3.6,0,931.24
+1007,2023-01-07,202,Beauty,Yoga Mat,2,262.63,5,South,Credit Card,2.6,0,499.0
+1008,2023-01-08,221,Sports,Laptop,1,249.52,15,North,Credit Card,3.7,0,212.09
+1009,2023-01-09,314,Clothing,Laptop,5,336.75,15,West,Credit Card,4.2,0,1431.19
+1010,2023-01-10,187,Electronics,Blender,2,78.42,5,North,Debit Card,2.8,0,149.0
+1011,2023-01-11,199,Clothing,Blender,4,24.68,5,East,Credit Card,3.2,0,93.78
+1012,2023-01-12,251,Books,T-Shirt,2,160.88,10,South,Debit Card,3.5,1,289.58
+1013,2023-01-13,230,Clothing,Perfume,3,355.28,15,East,Credit Card,4.8,0,905.96
+1014,2023-01-14,249,Clothing,Laptop,2,108.9,15,South,Credit Card,,1,185.13
+1015,2023-01-15,357,Sports,Yoga Mat,2,339.97,10,North,PayPal,2.6,0,611.95
+1016,2023-01-16,393,Sports,Novel,3,485.25,0,East,Debit Card,4.4,0,1455.75
+1017,2023-01-17,291,Sports,Yoga Mat,5,56.0,10,East,Credit Card,,0,252.0
+1018,2023-01-18,376,Beauty,Headphones,5,339.57,20,North,Debit Card,3.5,1,1358.28
+1019,2023-01-19,260,Books,Headphones,2,227.43,15,East,Debit Card,4.4,0,386.63
+1020,2023-01-20,121,Sports,Blender,3,435.38,5,West,UPI,4.8,0,1240.83
+1021,2023-01-21,352,Electronics,T-Shirt,3,96.79,20,South,PayPal,4.9,0,232.3
+1022,2023-01-22,335,Beauty,Headphones,4,349.38,15,South,PayPal,3.9,0,1187.89
+1023,2023-01-23,148,Home,Laptop,5,420.67,10,South,PayPal,3.4,0,1893.02
+1024,2023-01-24,158,Electronics,Yoga Mat,1,472.85,20,West,UPI,4.5,0,378.28
+1025,2023-01-25,269,Electronics,Yoga Mat,5,344.78,15,South,UPI,3.1,0,1465.31
+1026,2023-01-26,287,Sports,Blender,5,253.61,0,North,PayPal,3.9,0,1268.05
+1027,2023-01-27,370,Home,Perfume,4,312.74,0,East,UPI,3.4,0,1250.96
+1028,2023-01-28,289,Home,Perfume,1,435.75,5,West,UPI,4.1,0,413.96
+1029,2023-01-29,274,Beauty,Novel,4,289.59,15,South,UPI,3.1,0,984.61
+1030,2023-01-30,150,Home,Blender,1,24.88,0,North,PayPal,3.0,1,24.88
+1031,2023-01-31,154,Books,Novel,2,466.15,10,East,PayPal,4.8,0,839.07
+1032,2023-02-01,343,Sports,Perfume,1,347.86,15,East,PayPal,2.8,0,295.68
+1033,2023-02-02,230,Home,Blender,4,341.48,10,West,UPI,3.8,0,1229.33
+1034,2023-02-03,234,Beauty,Blender,5,115.67,10,West,PayPal,3.1,0,520.52
+1035,2023-02-04,120,Books,Blender,1,332.84,0,West,UPI,2.6,0,332.84
+1036,2023-02-05,266,Clothing,Perfume,1,202.98,15,North,Credit Card,2.6,0,172.53
+1037,2023-02-06,373,Clothing,Novel,3,329.09,20,North,UPI,2.9,0,789.82
+1038,2023-02-07,188,Books,Novel,5,62.22,0,West,Debit Card,4.7,0,311.1
+1039,2023-02-08,113,Beauty,Blender,2,332.33,0,South,PayPal,3.2,0,664.66
+1040,2023-02-09,341,Books,Headphones,4,499.7,15,East,PayPal,4.9,0,1698.98
+1041,2023-02-10,364,Sports,T-Shirt,2,33.61,15,East,Debit Card,4.0,0,57.14
+1042,2023-02-11,152,Sports,Perfume,5,488.81,10,North,UPI,3.6,1,2199.65
+1043,2023-02-12,191,Clothing,T-Shirt,1,209.37,15,East,Credit Card,4.0,0,177.96
+1044,2023-02-13,363,Home,T-Shirt,1,436.66,10,South,Debit Card,3.8,0,392.99
+1045,2023-02-14,134,Beauty,Novel,5,393.36,0,East,Debit Card,4.4,0,1966.8
+1046,2023-02-15,305,Clothing,Novel,1,287.83,5,North,UPI,3.2,0,273.44
+1047,2023-02-16,180,Home,Headphones,1,371.83,20,North,PayPal,3.4,0,297.46
+1048,2023-02-17,149,Home,T-Shirt,1,440.46,0,South,UPI,4.7,0,440.46
+1049,2023-02-18,101,Sports,T-Shirt,4,208.02,15,South,Debit Card,4.9,0,707.27
+1050,2023-02-19,153,Electronics,Blender,4,170.24,20,East,Debit Card,4.7,0,544.77
+1051,2023-02-20,205,Electronics,Novel,3,337.11,5,East,PayPal,3.5,0,960.76
+1052,2023-02-21,359,Books,T-Shirt,2,405.83,5,North,PayPal,4.5,0,771.08
+1053,2023-02-22,290,Sports,Yoga Mat,5,383.51,10,South,PayPal,3.7,0,1725.8
+1054,2023-02-23,317,Home,Headphones,5,400.92,20,South,UPI,3.7,0,1603.68
+1055,2023-02-24,143,Beauty,Yoga Mat,5,223.43,10,South,PayPal,3.0,0,1005.44
+1056,2023-02-25,261,Electronics,Yoga Mat,3,410.73,0,East,Debit Card,4.0,0,1232.19
+1057,2023-02-26,301,Home,Perfume,4,68.89,20,South,Debit Card,3.0,0,220.45
+1058,2023-02-27,369,Electronics,Perfume,3,276.79,0,North,Credit Card,3.3,0,830.37
+1059,2023-02-28,370,Electronics,Headphones,5,12.81,10,North,UPI,4.6,0,57.64
+1060,2023-03-01,314,Electronics,Yoga Mat,2,169.04,20,East,Credit Card,3.0,0,270.46
+1061,2023-03-02,351,Beauty,T-Shirt,1,189.56,10,West,Debit Card,2.7,0,170.6
+1062,2023-03-03,289,Sports,Novel,4,204.11,20,East,Credit Card,2.7,0,653.15
+1063,2023-03-04,395,Beauty,Headphones,4,350.77,10,West,Debit Card,4.9,0,1262.77
+1064,2023-03-05,312,Clothing,Blender,3,200.38,5,South,Credit Card,3.8,0,571.08
+1065,2023-03-06,307,Home,Yoga Mat,4,229.85,10,East,PayPal,3.5,0,827.46
+1066,2023-03-07,336,Sports,Headphones,5,126.39,5,North,Credit Card,4.5,0,600.35
+1067,2023-03-08,152,Sports,Laptop,5,192.88,10,South,PayPal,4.6,0,867.96
+1068,2023-03-09,379,Sports,Laptop,3,121.35,20,North,PayPal,3.3,0,291.24
+1069,2023-03-10,316,Sports,Perfume,5,45.86,20,South,UPI,4.2,1,183.44
+1070,2023-03-11,351,Beauty,Novel,2,305.68,20,East,PayPal,4.4,1,489.09
+1071,2023-03-12,287,Sports,T-Shirt,3,337.41,15,West,PayPal,4.1,0,860.4
+1072,2023-03-13,140,Books,Novel,2,313.54,0,South,Credit Card,,1,627.08
+1073,2023-03-14,256,Home,Novel,1,237.1,20,West,Debit Card,4.7,1,189.68
+1074,2023-03-15,114,Sports,Novel,2,196.09,5,South,UPI,3.8,0,372.57
+1075,2023-03-16,164,Home,Novel,1,433.02,20,North,PayPal,3.2,0,346.42
+1076,2023-03-17,108,Books,Blender,1,264.34,15,North,UPI,3.6,0,224.69
+1077,2023-03-18,228,Books,Blender,2,244.79,5,South,Credit Card,2.6,0,465.1
+1078,2023-03-19,235,Home,Perfume,3,22.55,15,West,PayPal,,0,57.5
+1079,2023-03-20,162,Electronics,Headphones,5,177.2,5,East,Credit Card,4.4,0,841.7
+1080,2023-03-21,238,Clothing,Laptop,5,196.29,10,East,UPI,2.5,1,883.3
+1081,2023-03-22,180,Electronics,Novel,1,205.41,0,North,Credit Card,3.5,0,205.41
+1082,2023-03-23,262,Electronics,Perfume,1,294.27,0,East,UPI,3.8,0,294.27
+1083,2023-03-24,388,Beauty,Headphones,3,271.46,15,North,Credit Card,2.6,0,692.22
+1084,2023-03-25,360,Electronics,Laptop,4,307.86,0,East,UPI,4.9,0,1231.44
+1085,2023-03-26,330,Sports,Yoga Mat,2,384.78,15,South,Debit Card,3.1,1,654.13
+1086,2023-03-27,140,Beauty,T-Shirt,1,408.35,15,North,Credit Card,3.3,0,347.1
+1087,2023-03-28,127,Beauty,Blender,5,361.87,15,North,Credit Card,3.3,0,1537.95
+1088,2023-03-29,234,Books,Yoga Mat,3,478.2,0,South,Debit Card,3.1,0,1434.6
+1089,2023-03-30,300,Electronics,Laptop,2,18.92,15,North,Debit Card,2.5,0,32.16
+1090,2023-03-31,367,Books,Yoga Mat,3,105.92,0,East,Credit Card,,0,317.76
+1091,2023-04-01,132,Home,T-Shirt,2,13.7,15,East,Debit Card,4.9,0,23.29
+1092,2023-04-02,147,Clothing,Perfume,2,327.25,20,North,PayPal,3.1,0,523.6
+1093,2023-04-03,161,Beauty,Laptop,1,450.02,15,East,UPI,4.2,0,382.52
+1094,2023-04-04,315,Home,Yoga Mat,3,129.3,5,West,UPI,4.4,0,368.5
+1095,2023-04-05,392,Home,Blender,3,464.24,15,North,UPI,4.6,0,1183.81
+1096,2023-04-06,198,Sports,Blender,5,39.52,10,South,PayPal,3.6,0,177.84
+1097,2023-04-07,271,Clothing,Headphones,5,467.86,15,West,Debit Card,3.3,0,1988.41
+1098,2023-04-08,313,Home,Yoga Mat,1,182.29,5,North,Debit Card,3.3,0,173.18
+1099,2023-04-09,134,Home,Novel,1,59.69,5,South,Credit Card,4.3,0,56.71
+1100,2023-04-10,326,Clothing,Yoga Mat,4,248.07,0,East,Debit Card,4.5,0,992.28
+1101,2023-04-11,200,Clothing,Perfume,5,135.81,20,South,Credit Card,3.0,0,543.24
+1102,2023-04-12,230,Home,Laptop,2,149.58,15,West,PayPal,3.4,0,254.29
+1103,2023-04-13,356,Clothing,Laptop,3,160.56,0,East,UPI,4.8,0,481.68
+1104,2023-04-14,104,Home,Perfume,1,403.47,20,North,UPI,4.5,0,322.78
+1105,2023-04-15,317,Home,Yoga Mat,3,274.18,15,East,UPI,5.0,0,699.16
+1106,2023-04-16,354,Sports,Perfume,3,162.53,10,North,Debit Card,4.4,0,438.83
+1107,2023-04-17,382,Electronics,T-Shirt,4,309.05,15,North,Credit Card,3.5,0,1050.77
+1108,2023-04-18,306,Home,Perfume,5,360.9,5,South,Credit Card,4.0,0,1714.28
+1109,2023-04-19,114,Books,Blender,1,143.58,5,South,PayPal,4.2,1,136.4
+1110,2023-04-20,141,Beauty,Perfume,3,212.63,10,South,Debit Card,2.7,0,574.1
+1111,2023-04-21,278,Electronics,Laptop,1,69.71,0,West,PayPal,3.9,0,69.71
+1112,2023-04-22,162,Electronics,Blender,2,98.75,20,West,Credit Card,4.3,0,158.0
+1113,2023-04-23,330,Electronics,Laptop,4,343.74,15,South,Credit Card,2.9,0,1168.72
+1114,2023-04-24,340,Sports,Headphones,2,98.89,5,West,UPI,4.5,0,187.89
+1115,2023-04-25,151,Home,Novel,1,267.32,0,East,Debit Card,4.0,0,267.32
+1116,2023-04-26,195,Sports,Laptop,1,357.42,10,East,Credit Card,4.9,1,321.68
+1117,2023-04-27,321,Home,Blender,5,62.36,5,West,UPI,2.6,1,296.21
+1118,2023-04-28,330,Sports,Headphones,3,287.97,10,West,Debit Card,3.2,0,777.52
+1119,2023-04-29,336,Sports,Laptop,3,135.71,15,East,PayPal,4.0,0,346.06
+1120,2023-04-30,242,Beauty,T-Shirt,2,481.82,20,North,Debit Card,3.2,0,770.91
+1121,2023-05-01,270,Books,Perfume,4,246.93,5,East,Debit Card,4.3,1,938.33
+1122,2023-05-02,128,Sports,Novel,3,404.93,5,East,Credit Card,4.4,1,1154.05
+1123,2023-05-03,135,Beauty,Laptop,5,279.6,15,West,Credit Card,2.8,0,1188.3
+1124,2023-05-04,112,Clothing,Headphones,2,31.26,0,East,Debit Card,3.8,0,62.52
+1125,2023-05-05,259,Books,T-Shirt,2,320.23,20,West,Credit Card,3.8,0,512.37
+1126,2023-05-06,286,Sports,Yoga Mat,5,476.18,5,West,Credit Card,3.4,0,2261.86
+1127,2023-05-07,342,Electronics,Headphones,4,304.78,20,South,Credit Card,4.8,0,975.3
+1128,2023-05-08,185,Clothing,Perfume,5,411.39,5,East,UPI,4.6,0,1954.1
+1129,2023-05-09,383,Clothing,Headphones,4,443.25,20,North,UPI,4.2,0,1418.4
+1130,2023-05-10,165,Beauty,T-Shirt,5,121.75,10,South,Debit Card,4.3,0,547.88
+1131,2023-05-11,269,Clothing,Headphones,5,113.89,5,West,Credit Card,3.7,0,540.98
+1132,2023-05-12,144,Books,T-Shirt,1,309.37,20,West,UPI,4.8,1,247.5
+1133,2023-05-13,161,Sports,Laptop,2,211.39,0,North,Debit Card,4.2,0,422.78
+1134,2023-05-14,233,Sports,T-Shirt,5,421.52,10,West,Credit Card,4.3,0,1896.84
+1135,2023-05-15,383,Electronics,T-Shirt,5,451.0,10,East,PayPal,4.7,0,2029.5
+1136,2023-05-16,127,Beauty,Novel,3,183.17,0,South,Credit Card,3.2,0,549.51
+1137,2023-05-17,207,Electronics,T-Shirt,2,126.06,20,West,Credit Card,4.5,0,201.7
+1138,2023-05-18,143,Clothing,T-Shirt,3,392.45,15,West,UPI,3.0,0,1000.75
+1139,2023-05-19,385,Electronics,Yoga Mat,2,144.64,0,North,Debit Card,3.4,0,289.28
+1140,2023-05-20,227,Books,Laptop,3,413.07,20,East,Debit Card,3.3,0,991.37
+1141,2023-05-21,330,Sports,Perfume,5,217.62,0,West,UPI,,0,1088.1
+1142,2023-05-22,289,Clothing,Novel,5,337.09,0,North,Credit Card,4.6,0,1685.45
+1143,2023-05-23,324,Electronics,Yoga Mat,1,56.8,5,West,PayPal,,0,53.96
+1144,2023-05-24,382,Beauty,Blender,3,315.68,20,North,Credit Card,4.3,0,757.63
+1145,2023-05-25,220,Books,Laptop,4,231.36,15,North,Credit Card,,0,786.62
+1146,2023-05-26,215,Books,Laptop,1,297.43,5,East,PayPal,4.9,0,282.56
+1147,2023-05-27,332,Electronics,Blender,3,92.32,0,West,UPI,3.7,0,276.96
+1148,2023-05-28,358,Sports,Perfume,3,371.06,0,East,Debit Card,3.5,0,1113.18
+1149,2023-05-29,297,Electronics,T-Shirt,1,432.76,0,North,UPI,2.9,0,432.76
+1150,2023-05-30,236,Clothing,Yoga Mat,5,116.19,20,South,UPI,4.5,0,464.76
+1151,2023-05-31,264,Electronics,Headphones,3,56.89,20,West,Credit Card,4.3,0,136.54
+1152,2023-06-01,324,Books,Novel,5,21.57,5,South,Debit Card,3.5,0,102.46
+1153,2023-06-02,333,Electronics,Headphones,1,324.56,15,West,Debit Card,2.6,0,275.88
+1154,2023-06-03,271,Sports,Blender,5,307.47,5,East,UPI,4.6,1,1460.48
+1155,2023-06-04,251,Beauty,Laptop,2,277.87,10,East,PayPal,2.5,0,500.17
+1156,2023-06-05,259,Home,Perfume,4,123.64,0,East,UPI,4.3,0,494.56
+1157,2023-06-06,195,Electronics,Laptop,3,201.53,0,East,PayPal,4.9,0,604.59
+1158,2023-06-07,332,Sports,Novel,4,301.28,0,East,Debit Card,3.6,0,1205.12
+1159,2023-06-08,279,Sports,Laptop,5,253.41,5,South,UPI,3.1,0,1203.7
+1160,2023-06-09,212,Beauty,Laptop,3,494.0,5,East,Credit Card,4.3,0,1407.9
+1161,2023-06-10,151,Books,Novel,5,76.85,0,North,UPI,4.5,1,384.25
+1162,2023-06-11,367,Sports,Yoga Mat,2,350.61,5,North,Debit Card,3.9,0,666.16
+1163,2023-06-12,394,Sports,Yoga Mat,1,208.11,20,South,Credit Card,,0,166.49
+1164,2023-06-13,212,Sports,Novel,3,219.81,20,West,Credit Card,2.6,0,527.54
+1165,2023-06-14,200,Sports,Perfume,2,361.61,5,North,PayPal,3.8,0,687.06
+1166,2023-06-15,212,Clothing,Blender,2,349.28,0,West,Credit Card,,0,698.56
+1167,2023-06-16,180,Clothing,Laptop,3,495.71,5,South,Credit Card,4.7,0,1412.77
+1168,2023-06-17,286,Books,Perfume,5,72.9,5,West,UPI,2.9,0,346.28
+1169,2023-06-18,212,Electronics,Laptop,2,61.0,5,West,Debit Card,4.5,0,115.9
+1170,2023-06-19,101,Sports,Blender,4,364.92,10,West,PayPal,3.9,1,1313.71
+1171,2023-06-20,229,Beauty,Yoga Mat,2,293.4,20,West,UPI,3.5,1,469.44
+1172,2023-06-21,319,Electronics,Perfume,5,144.33,15,South,Credit Card,2.8,0,613.4
+1173,2023-06-22,153,Beauty,T-Shirt,5,48.91,15,North,Credit Card,4.7,0,207.87
+1174,2023-06-23,323,Electronics,T-Shirt,4,51.96,10,East,PayPal,2.9,0,187.06
+1175,2023-06-24,324,Books,T-Shirt,2,448.14,5,West,Debit Card,3.3,1,851.47
+1176,2023-06-25,225,Sports,Yoga Mat,5,104.0,10,North,PayPal,3.2,0,468.0
+1177,2023-06-26,229,Sports,Yoga Mat,3,168.44,10,North,UPI,4.7,0,454.79
+1178,2023-06-27,152,Home,Blender,1,121.05,0,South,PayPal,4.2,0,121.05
+1179,2023-06-28,271,Beauty,Laptop,1,183.94,20,North,Credit Card,4.5,0,147.15
+1180,2023-06-29,317,Electronics,Blender,1,44.01,15,South,UPI,3.1,1,37.41
+1181,2023-06-30,259,Electronics,Blender,2,264.33,5,West,Credit Card,4.1,0,502.23
+1182,2023-07-01,297,Clothing,Yoga Mat,4,43.12,15,West,Debit Card,3.9,1,146.61
+1183,2023-07-02,346,Home,T-Shirt,5,402.16,15,East,Credit Card,4.6,0,1709.18
+1184,2023-07-03,302,Clothing,Headphones,3,124.51,20,East,Credit Card,4.8,1,298.82
+1185,2023-07-04,283,Clothing,Laptop,3,274.6,15,East,PayPal,2.5,0,700.23
+1186,2023-07-05,222,Clothing,Yoga Mat,2,441.23,15,North,Credit Card,4.2,0,750.09
+1187,2023-07-06,354,Beauty,T-Shirt,1,328.92,10,West,UPI,2.6,0,296.03
+1188,2023-07-07,393,Beauty,Perfume,2,271.14,20,South,UPI,3.9,0,433.82
+1189,2023-07-08,379,Books,Headphones,4,168.91,0,East,Debit Card,3.2,0,675.64
+1190,2023-07-09,197,Books,Headphones,4,173.16,5,South,UPI,3.3,1,658.01
+1191,2023-07-10,297,Clothing,Yoga Mat,5,338.04,15,South,PayPal,3.4,0,1436.67
+1192,2023-07-11,339,Home,Novel,5,497.12,5,East,Debit Card,4.1,0,2361.32
+1193,2023-07-12,243,Electronics,Laptop,4,334.29,0,West,UPI,3.3,1,1337.16
+1194,2023-07-13,196,Beauty,Headphones,4,283.3,5,East,PayPal,4.3,0,1076.54
+1195,2023-07-14,300,Home,Yoga Mat,4,368.01,0,South,UPI,3.5,0,1472.04
+1196,2023-07-15,223,Sports,Yoga Mat,2,237.94,10,East,UPI,2.7,0,428.29
+1197,2023-07-16,286,Beauty,T-Shirt,4,39.46,15,South,Credit Card,4.5,0,134.16
+1198,2023-07-17,358,Beauty,Perfume,3,285.52,0,South,UPI,3.2,0,856.56
+1199,2023-07-18,247,Books,Novel,1,479.23,5,East,UPI,3.6,0,455.27
+1200,2023-07-19,351,Electronics,Laptop,4,95.89,15,North,PayPal,4.2,0,326.03
+1201,2023-07-20,246,Electronics,Blender,1,348.09,10,East,PayPal,3.3,0,313.28
+1202,2023-07-21,247,Sports,Perfume,2,108.45,15,North,Credit Card,2.6,0,184.36
+1203,2023-07-22,298,Sports,Perfume,1,272.55,0,South,UPI,3.4,0,272.55
+1204,2023-07-23,227,Beauty,T-Shirt,2,57.36,10,South,Credit Card,4.9,1,103.25
+1205,2023-07-24,138,Clothing,Headphones,3,230.67,5,North,UPI,4.1,0,657.41
+1206,2023-07-25,228,Books,Headphones,2,380.51,10,South,Debit Card,4.2,1,684.92
+1207,2023-07-26,366,Books,T-Shirt,2,180.3,10,North,Debit Card,4.1,0,324.54
+1208,2023-07-27,250,Beauty,Yoga Mat,5,335.8,20,North,Credit Card,3.0,0,1343.2
+1209,2023-07-28,397,Home,Headphones,4,399.76,10,South,Credit Card,3.5,0,1439.14
+1210,2023-07-29,198,Clothing,Novel,4,464.31,10,West,Credit Card,4.4,0,1671.52
+1211,2023-07-30,362,Beauty,Laptop,3,124.96,15,North,PayPal,2.8,0,318.65
+1212,2023-07-31,351,Clothing,Perfume,3,205.65,5,East,PayPal,3.2,0,586.1
+1213,2023-08-01,243,Clothing,Perfume,4,84.67,15,East,PayPal,3.2,0,287.88
+1214,2023-08-02,211,Clothing,Novel,5,496.31,15,South,Credit Card,3.6,0,2109.32
+1215,2023-08-03,159,Beauty,Headphones,4,464.22,0,West,UPI,5.0,0,1856.88
+1216,2023-08-04,101,Books,Perfume,5,274.57,15,South,Debit Card,2.7,0,1166.92
+1217,2023-08-05,353,Books,Blender,3,422.59,20,West,Credit Card,3.8,0,1014.22
+1218,2023-08-06,239,Clothing,Laptop,1,265.26,20,North,PayPal,2.9,0,212.21
+1219,2023-08-07,136,Home,Laptop,3,315.55,0,North,PayPal,4.9,0,946.65
+1220,2023-08-08,259,Electronics,Perfume,3,53.66,5,North,Credit Card,2.8,0,152.93
+1221,2023-08-09,108,Beauty,T-Shirt,2,380.07,5,North,Credit Card,3.5,0,722.13
+1222,2023-08-10,332,Electronics,Perfume,2,72.57,15,East,PayPal,4.3,0,123.37
+1223,2023-08-11,198,Home,T-Shirt,2,414.76,15,East,UPI,4.3,0,705.09
+1224,2023-08-12,246,Beauty,Perfume,2,393.18,15,South,PayPal,3.6,0,668.41
+1225,2023-08-13,307,Clothing,Blender,5,357.27,5,West,PayPal,3.4,0,1697.03
+1226,2023-08-14,230,Books,Yoga Mat,4,27.71,10,North,Credit Card,3.5,0,99.76
+1227,2023-08-15,251,Electronics,Laptop,1,158.52,20,North,UPI,3.2,0,126.82
+1228,2023-08-16,153,Sports,Perfume,3,138.92,10,West,PayPal,3.0,0,375.08
+1229,2023-08-17,219,Sports,Blender,5,186.46,10,West,PayPal,3.7,0,839.07
+1230,2023-08-18,260,Home,T-Shirt,1,52.93,5,South,Debit Card,3.2,0,50.28
+1231,2023-08-19,215,Clothing,T-Shirt,5,469.1,10,West,Credit Card,3.2,0,2110.95
+1232,2023-08-20,174,Electronics,Laptop,5,281.35,0,North,Debit Card,4.1,0,1406.75
+1233,2023-08-21,212,Clothing,Novel,3,159.7,15,North,Debit Card,4.9,0,407.23
+1234,2023-08-22,203,Electronics,Perfume,4,204.51,0,North,PayPal,4.0,0,818.04
+1235,2023-08-23,353,Home,Headphones,2,229.12,20,North,Credit Card,2.7,0,366.59
+1236,2023-08-24,326,Home,T-Shirt,4,304.28,15,North,UPI,2.7,0,1034.55
+1237,2023-08-25,211,Sports,Yoga Mat,3,262.67,10,South,PayPal,4.9,0,709.21
+1238,2023-08-26,198,Clothing,Yoga Mat,3,460.49,20,North,UPI,3.2,0,1105.18
+1239,2023-08-27,252,Beauty,T-Shirt,3,253.5,15,South,UPI,,0,646.42
+1240,2023-08-28,293,Sports,Novel,1,496.15,10,North,Credit Card,4.0,0,446.54
+1241,2023-08-29,262,Clothing,Novel,4,427.19,0,East,Debit Card,4.1,0,1708.76
+1242,2023-08-30,307,Sports,Blender,4,112.16,15,East,Credit Card,4.1,0,381.34
+1243,2023-08-31,268,Beauty,Yoga Mat,5,465.98,10,East,UPI,3.2,0,2096.91
+1244,2023-09-01,260,Books,Blender,5,67.01,0,East,PayPal,2.5,0,335.05
+1245,2023-09-02,167,Books,Yoga Mat,5,410.54,20,South,UPI,4.9,0,1642.16
+1246,2023-09-03,388,Books,Perfume,3,196.5,20,South,PayPal,3.1,0,471.6
+1247,2023-09-04,376,Books,Perfume,4,440.2,20,West,PayPal,4.2,0,1408.64
+1248,2023-09-05,234,Electronics,Headphones,3,435.34,20,North,Credit Card,4.3,0,1044.82
+1249,2023-09-06,294,Books,Perfume,1,404.89,5,East,UPI,4.0,0,384.65
+1250,2023-09-07,227,Beauty,Headphones,5,397.1,15,South,Debit Card,3.3,0,1687.68
+1251,2023-09-08,132,Home,Perfume,3,159.28,15,North,UPI,3.2,1,406.16
+1252,2023-09-09,275,Home,Laptop,3,49.64,5,North,UPI,4.0,1,141.47
+1253,2023-09-10,121,Electronics,Perfume,1,207.45,10,South,Debit Card,4.7,0,186.7
+1254,2023-09-11,337,Books,Blender,2,95.02,10,East,Credit Card,4.9,0,171.04
+1255,2023-09-12,257,Books,T-Shirt,4,350.52,20,West,UPI,2.8,0,1121.66
+1256,2023-09-13,137,Books,Blender,2,179.58,0,North,UPI,2.9,0,359.16
+1257,2023-09-14,329,Sports,T-Shirt,5,488.04,10,West,PayPal,4.9,0,2196.18
+1258,2023-09-15,150,Clothing,Novel,3,324.07,0,East,UPI,4.3,0,972.21
+1259,2023-09-16,363,Sports,Blender,1,413.01,15,East,Debit Card,4.7,0,351.06
+1260,2023-09-17,382,Clothing,Novel,1,74.93,0,West,PayPal,3.0,0,74.93
+1261,2023-09-18,126,Books,Headphones,4,432.38,15,East,Credit Card,4.0,0,1470.09
+1262,2023-09-19,325,Books,Headphones,2,462.14,5,North,PayPal,,0,878.07
+1263,2023-09-20,376,Sports,Laptop,4,248.65,5,West,Debit Card,4.2,0,944.87
+1264,2023-09-21,385,Sports,Perfume,3,307.05,20,East,Debit Card,3.5,0,736.92
+1265,2023-09-22,196,Clothing,Blender,4,384.75,10,West,PayPal,2.5,0,1385.1
+1266,2023-09-23,383,Home,Novel,1,95.66,20,North,Credit Card,4.0,0,76.53
+1267,2023-09-24,246,Clothing,T-Shirt,1,256.25,15,East,PayPal,3.1,0,217.81
+1268,2023-09-25,103,Sports,Headphones,5,205.33,20,North,Credit Card,3.6,1,821.32
+1269,2023-09-26,134,Beauty,Perfume,5,81.71,0,East,PayPal,,0,408.55
+1270,2023-09-27,291,Sports,Headphones,3,190.08,15,South,Debit Card,3.5,0,484.7
+1271,2023-09-28,148,Beauty,T-Shirt,2,43.39,5,East,UPI,4.6,0,82.44
+1272,2023-09-29,116,Electronics,Perfume,4,22.64,10,West,UPI,3.0,0,81.5
+1273,2023-09-30,271,Sports,Perfume,3,76.22,15,East,Credit Card,4.2,0,194.36
+1274,2023-10-01,319,Electronics,Novel,5,481.92,15,North,Credit Card,4.9,0,2048.16
+1275,2023-10-02,257,Home,Novel,4,279.26,0,North,Credit Card,2.8,0,1117.04
+1276,2023-10-03,145,Clothing,Blender,5,483.24,10,East,Debit Card,2.5,0,2174.58
+1277,2023-10-04,105,Beauty,Blender,4,221.91,5,West,PayPal,3.6,0,843.26
+1278,2023-10-05,198,Clothing,Yoga Mat,2,162.78,15,South,Debit Card,2.7,0,276.73
+1279,2023-10-06,332,Electronics,Yoga Mat,3,258.0,15,West,UPI,4.4,0,657.9
+1280,2023-10-07,136,Beauty,Laptop,4,225.35,0,South,Credit Card,4.8,0,901.4
+1281,2023-10-08,379,Clothing,Headphones,1,61.77,20,North,PayPal,3.6,0,49.42
+1282,2023-10-09,280,Sports,Blender,1,323.99,5,West,UPI,3.1,0,307.79
+1283,2023-10-10,194,Books,Novel,4,115.85,10,South,UPI,,0,417.06
+1284,2023-10-11,198,Electronics,T-Shirt,4,313.59,15,East,UPI,4.3,0,1066.21
+1285,2023-10-12,287,Clothing,Novel,4,328.59,15,North,Debit Card,2.5,0,1117.21
+1286,2023-10-13,215,Electronics,Headphones,1,84.48,5,East,Credit Card,4.0,1,80.26
+1287,2023-10-14,290,Electronics,Yoga Mat,1,40.05,20,North,UPI,4.0,1,32.04
+1288,2023-10-15,352,Beauty,Novel,4,392.56,15,West,Credit Card,4.1,0,1334.7
+1289,2023-10-16,260,Beauty,Laptop,5,235.29,5,West,Debit Card,3.1,0,1117.63
+1290,2023-10-17,355,Books,Headphones,5,38.49,0,North,UPI,4.3,0,192.45
+1291,2023-10-18,227,Sports,Yoga Mat,2,497.47,20,North,Debit Card,2.7,0,795.95
+1292,2023-10-19,117,Electronics,T-Shirt,3,38.3,10,North,Debit Card,3.0,0,103.41
+1293,2023-10-20,380,Clothing,Yoga Mat,5,350.56,15,West,Credit Card,4.7,0,1489.88
+1294,2023-10-21,322,Home,Perfume,1,491.99,5,South,UPI,4.3,0,467.39
+1295,2023-10-22,153,Electronics,Laptop,5,127.19,0,East,Debit Card,2.5,0,635.95
+1296,2023-10-23,157,Electronics,Headphones,2,79.69,10,East,UPI,3.1,0,143.44
+1297,2023-10-24,273,Books,T-Shirt,2,69.47,5,West,Credit Card,3.0,0,131.99
+1298,2023-10-25,379,Sports,Laptop,3,158.59,5,East,Debit Card,3.2,0,451.98
+1299,2023-10-26,213,Home,Yoga Mat,5,59.5,10,North,Credit Card,3.1,0,267.75
+1300,2023-10-27,387,Beauty,Laptop,1,349.15,0,South,UPI,2.7,0,349.15
+1301,2023-10-28,250,Beauty,Headphones,1,40.51,0,East,UPI,3.6,0,40.51
+1302,2023-10-29,226,Clothing,Blender,4,259.61,20,South,Credit Card,4.3,0,830.75
+1303,2023-10-30,254,Home,Laptop,1,498.37,15,North,PayPal,4.0,0,423.61
+1304,2023-10-31,372,Beauty,Perfume,3,408.84,10,East,Debit Card,4.2,0,1103.87
+1305,2023-11-01,203,Clothing,Laptop,3,311.45,10,West,UPI,2.7,0,840.92
+1306,2023-11-02,398,Sports,Yoga Mat,1,160.05,10,South,UPI,4.9,0,144.05
+1307,2023-11-03,345,Clothing,Yoga Mat,1,315.7,0,North,Debit Card,4.6,0,315.7
+1308,2023-11-04,275,Beauty,T-Shirt,4,268.24,15,South,Credit Card,4.5,0,912.02
+1309,2023-11-05,138,Books,Yoga Mat,1,218.77,20,East,Credit Card,4.6,0,175.02
+1310,2023-11-06,269,Books,Novel,4,74.04,5,East,Credit Card,,0,281.35
+1311,2023-11-07,346,Books,Headphones,4,444.43,5,West,PayPal,3.9,0,1688.83
+1312,2023-11-08,125,Beauty,Headphones,1,230.38,10,North,PayPal,3.0,0,207.34
+1313,2023-11-09,112,Books,Blender,2,105.36,15,North,UPI,4.0,0,179.11
+1314,2023-11-10,135,Home,Blender,2,190.19,0,West,Credit Card,4.4,1,380.38
+1315,2023-11-11,272,Sports,Headphones,4,212.91,15,West,Debit Card,4.3,0,723.89
+1316,2023-11-12,119,Clothing,Perfume,1,415.48,15,North,UPI,3.8,0,353.16
+1317,2023-11-13,363,Clothing,Blender,2,369.46,0,South,Debit Card,2.7,0,738.92
+1318,2023-11-14,241,Beauty,T-Shirt,1,386.95,10,South,UPI,3.4,0,348.26
+1319,2023-11-15,242,Books,Yoga Mat,1,15.4,15,West,PayPal,4.8,1,13.09
+1320,2023-11-16,191,Books,Headphones,1,213.91,5,South,UPI,4.0,0,203.21
+1321,2023-11-17,387,Electronics,Blender,5,245.85,0,North,PayPal,3.8,0,1229.25
+1322,2023-11-18,314,Sports,Headphones,1,19.39,20,East,UPI,3.2,0,15.51
+1323,2023-11-19,150,Home,Novel,5,137.3,10,East,Credit Card,3.4,0,617.85
+1324,2023-11-20,252,Clothing,Laptop,4,382.53,0,South,Debit Card,4.7,0,1530.12
+1325,2023-11-21,285,Electronics,Yoga Mat,2,77.17,20,West,Credit Card,4.2,0,123.47
+1326,2023-11-22,162,Electronics,Headphones,2,272.29,20,West,UPI,4.5,0,435.66
+1327,2023-11-23,289,Beauty,Laptop,2,115.44,15,West,UPI,3.6,1,196.25
+1328,2023-11-24,224,Clothing,Blender,2,15.93,15,West,UPI,4.1,0,27.08
+1329,2023-11-25,249,Beauty,Laptop,2,128.18,15,West,PayPal,3.1,0,217.91
+1330,2023-11-26,157,Home,Yoga Mat,2,488.17,0,South,Debit Card,4.3,0,976.34
+1331,2023-11-27,279,Electronics,Headphones,2,402.74,0,East,Debit Card,3.6,0,805.48
+1332,2023-11-28,269,Electronics,Novel,4,480.18,10,East,UPI,3.6,0,1728.65
+1333,2023-11-29,370,Sports,Perfume,1,249.04,15,South,UPI,4.1,0,211.68
+1334,2023-11-30,153,Home,Blender,3,63.76,20,West,PayPal,4.8,0,153.02
+1335,2023-12-01,200,Electronics,Headphones,5,278.49,5,South,Credit Card,2.7,0,1322.83
+1336,2023-12-02,363,Home,Yoga Mat,3,232.63,10,East,Credit Card,4.6,0,628.1
+1337,2023-12-03,152,Clothing,Blender,3,423.72,0,North,Debit Card,,1,1271.16
+1338,2023-12-04,159,Books,T-Shirt,1,58.05,10,South,PayPal,3.6,0,52.24
+1339,2023-12-05,207,Electronics,Laptop,1,249.23,10,West,UPI,2.6,0,224.31
+1340,2023-12-06,104,Sports,Perfume,1,83.51,10,East,Debit Card,3.3,0,75.16
+1341,2023-12-07,202,Clothing,Yoga Mat,2,169.08,10,East,PayPal,3.8,0,304.34
+1342,2023-12-08,295,Home,T-Shirt,4,371.29,5,East,Credit Card,2.6,0,1410.9
+1343,2023-12-09,361,Beauty,Headphones,2,243.24,15,East,PayPal,3.7,0,413.51
+1344,2023-12-10,146,Clothing,Novel,4,194.18,20,West,Credit Card,4.8,0,621.38
+1345,2023-12-11,243,Electronics,Blender,4,203.28,10,North,PayPal,2.8,0,731.81
+1346,2023-12-12,368,Home,Laptop,3,235.12,10,East,Debit Card,4.4,0,634.82
+1347,2023-12-13,223,Books,Blender,3,394.65,10,South,Credit Card,3.5,0,1065.55
+1348,2023-12-14,205,Clothing,Perfume,4,447.11,15,North,Debit Card,4.1,0,1520.17
+1349,2023-12-15,257,Electronics,Headphones,4,478.1,0,East,Debit Card,3.2,0,1912.4
+1350,2023-12-16,246,Sports,Blender,2,395.57,0,North,Credit Card,2.9,0,791.14
+1351,2023-12-17,244,Beauty,Laptop,2,164.54,5,South,Credit Card,2.9,0,312.63
+1352,2023-12-18,219,Home,Headphones,3,347.18,0,East,UPI,2.7,0,1041.54
+1353,2023-12-19,374,Clothing,Blender,1,224.42,10,South,UPI,3.0,0,201.98
+1354,2023-12-20,191,Clothing,Novel,4,134.78,10,West,UPI,4.2,0,485.21
+1355,2023-12-21,157,Books,Yoga Mat,2,422.02,10,East,Debit Card,4.7,0,759.64
+1356,2023-12-22,328,Books,Headphones,3,28.82,5,East,Debit Card,4.5,0,82.14
+1357,2023-12-23,216,Sports,Yoga Mat,2,451.85,10,East,UPI,4.2,0,813.33
+1358,2023-12-24,378,Beauty,Headphones,4,236.11,0,East,Debit Card,2.8,0,944.44
+1359,2023-12-25,226,Sports,Novel,4,322.22,15,West,Debit Card,3.2,0,1095.55
+1360,2023-12-26,228,Electronics,Yoga Mat,5,333.07,15,East,Credit Card,3.3,0,1415.55
+1361,2023-12-27,157,Electronics,T-Shirt,1,448.6,20,North,Credit Card,3.1,0,358.88
+1362,2023-12-28,221,Sports,Laptop,5,321.96,0,East,Debit Card,3.8,0,1609.8
+1363,2023-12-29,100,Beauty,T-Shirt,3,310.82,10,West,UPI,3.8,0,839.21
+1364,2023-12-30,338,Sports,Blender,2,42.65,15,East,PayPal,3.4,1,72.5
+1365,2023-12-31,389,Beauty,Novel,3,264.01,0,North,UPI,3.4,0,792.03
+1366,2024-01-01,195,Beauty,T-Shirt,4,83.57,15,West,PayPal,,0,284.14
+1367,2024-01-02,225,Home,Headphones,5,371.33,10,West,UPI,4.5,0,1670.98
+1368,2024-01-03,217,Beauty,Blender,5,260.98,15,North,Credit Card,3.3,0,1109.16
+1369,2024-01-04,147,Books,Blender,5,343.3,20,North,Debit Card,4.8,0,1373.2
+1370,2024-01-05,188,Beauty,T-Shirt,3,30.41,20,North,Debit Card,4.9,0,72.98
+1371,2024-01-06,336,Beauty,T-Shirt,4,51.54,15,North,Credit Card,3.3,0,175.24
+1372,2024-01-07,371,Beauty,Novel,2,360.99,0,North,PayPal,3.4,0,721.98
+1373,2024-01-08,288,Electronics,Laptop,2,45.31,0,West,PayPal,3.8,0,90.62
+1374,2024-01-09,291,Books,T-Shirt,3,44.91,0,West,PayPal,4.9,1,134.73
+1375,2024-01-10,168,Books,Perfume,5,15.92,15,East,Credit Card,4.7,0,67.66
+1376,2024-01-11,377,Sports,T-Shirt,1,478.68,0,East,PayPal,2.8,1,478.68
+1377,2024-01-12,346,Home,Yoga Mat,3,371.37,10,South,Credit Card,3.5,0,1002.7
+1378,2024-01-13,175,Beauty,Headphones,3,183.08,20,East,UPI,3.9,0,439.39
+1379,2024-01-14,253,Clothing,Perfume,4,155.29,10,East,UPI,3.8,0,559.04
+1380,2024-01-15,243,Home,Perfume,2,181.34,0,North,Credit Card,3.0,0,362.68
+1381,2024-01-16,185,Home,Yoga Mat,3,389.57,10,North,Debit Card,4.6,0,1051.84
+1382,2024-01-17,284,Books,Yoga Mat,3,334.06,0,East,UPI,4.2,1,1002.18
+1383,2024-01-18,384,Home,Blender,5,100.74,15,South,PayPal,4.6,1,428.14
+1384,2024-01-19,319,Beauty,Laptop,5,95.3,10,North,Credit Card,4.6,0,428.85
+1385,2024-01-20,168,Beauty,Headphones,1,58.2,15,East,PayPal,4.4,0,49.47
+1386,2024-01-21,146,Electronics,Novel,4,333.54,15,East,PayPal,3.6,0,1134.04
+1387,2024-01-22,193,Beauty,Perfume,1,384.53,5,West,Debit Card,4.0,1,365.3
+1388,2024-01-23,337,Beauty,Novel,5,139.86,0,South,PayPal,2.9,0,699.3
+1389,2024-01-24,303,Books,T-Shirt,2,20.25,20,West,Debit Card,4.2,0,32.4
+1390,2024-01-25,317,Beauty,T-Shirt,5,50.25,0,South,UPI,2.9,0,251.25
+1391,2024-01-26,138,Electronics,Novel,4,484.24,20,North,Credit Card,4.2,0,1549.57
+1392,2024-01-27,199,Clothing,T-Shirt,5,154.76,0,South,PayPal,3.1,1,773.8
+1393,2024-01-28,388,Books,Laptop,4,386.91,15,East,Credit Card,2.8,0,1315.49
+1394,2024-01-29,353,Clothing,Yoga Mat,4,316.08,10,East,PayPal,2.9,0,1137.89
+1395,2024-01-30,321,Books,T-Shirt,4,197.14,10,South,Credit Card,2.5,0,709.7
+1396,2024-01-31,122,Sports,Blender,4,110.78,5,South,PayPal,4.3,0,420.96
+1397,2024-02-01,349,Home,T-Shirt,4,69.47,20,South,PayPal,4.3,0,222.3
+1398,2024-02-02,109,Sports,Headphones,2,311.35,20,West,PayPal,3.8,0,498.16
+1399,2024-02-03,345,Beauty,Laptop,1,389.56,20,South,PayPal,2.9,0,311.65
+1400,2024-02-04,199,Clothing,Headphones,3,325.5,15,North,PayPal,2.7,1,830.02
+1401,2024-02-05,389,Beauty,Headphones,1,269.84,20,West,PayPal,2.5,0,215.87
+1402,2024-02-06,279,Home,Blender,4,30.55,10,West,PayPal,2.9,0,109.98
+1403,2024-02-07,322,Books,Laptop,2,484.55,15,South,PayPal,4.7,1,823.74
+1404,2024-02-08,349,Home,Laptop,5,401.36,0,North,PayPal,3.1,0,2006.8
+1405,2024-02-09,246,Electronics,Laptop,2,153.47,20,West,Credit Card,3.4,0,245.55
+1406,2024-02-10,195,Home,Laptop,4,490.18,20,East,Debit Card,2.8,0,1568.58
+1407,2024-02-11,356,Electronics,Laptop,2,304.91,0,West,PayPal,3.1,0,609.82
+1408,2024-02-12,103,Home,Blender,2,295.38,20,South,Debit Card,3.8,0,472.61
+1409,2024-02-13,115,Electronics,T-Shirt,4,376.55,0,North,PayPal,4.0,1,1506.2
+1410,2024-02-14,379,Clothing,Headphones,2,407.76,15,South,PayPal,3.1,0,693.19
+1411,2024-02-15,346,Beauty,Laptop,3,331.66,10,East,Credit Card,2.6,0,895.48
+1412,2024-02-16,357,Beauty,Perfume,3,72.76,0,East,UPI,3.5,0,218.28
+1413,2024-02-17,259,Sports,T-Shirt,2,175.74,5,East,UPI,3.1,0,333.91
+1414,2024-02-18,251,Beauty,T-Shirt,5,464.75,0,South,Credit Card,3.0,0,2323.75
+1415,2024-02-19,277,Books,Headphones,4,120.05,20,West,Debit Card,4.9,0,384.16
+1416,2024-02-20,262,Home,Blender,3,192.35,15,South,UPI,4.0,0,490.49
+1417,2024-02-21,132,Sports,Novel,5,221.71,15,North,Credit Card,3.9,0,942.27
+1418,2024-02-22,278,Books,Novel,2,225.3,0,West,Credit Card,3.5,1,450.6
+1419,2024-02-23,200,Books,T-Shirt,5,310.33,10,East,UPI,3.6,0,1396.48
+1420,2024-02-24,367,Electronics,Yoga Mat,1,472.1,5,South,Debit Card,3.9,0,448.5
+1421,2024-02-25,164,Beauty,Yoga Mat,3,127.93,15,East,Credit Card,4.2,0,326.22
+1422,2024-02-26,267,Clothing,Headphones,2,69.53,20,East,PayPal,4.3,0,111.25
+1423,2024-02-27,142,Clothing,Novel,4,106.75,20,North,Debit Card,2.9,0,341.6
+1424,2024-02-28,143,Sports,T-Shirt,2,444.58,10,West,Debit Card,3.8,0,800.24
+1425,2024-02-29,384,Clothing,Blender,4,326.44,15,North,UPI,3.5,0,1109.9
+1426,2024-03-01,111,Home,Novel,2,150.08,0,North,UPI,4.7,0,300.16
+1427,2024-03-02,194,Clothing,T-Shirt,5,409.8,20,North,PayPal,4.1,1,1639.2
+1428,2024-03-03,352,Sports,T-Shirt,5,432.06,10,East,Credit Card,3.8,1,1944.27
+1429,2024-03-04,341,Clothing,Laptop,5,424.78,15,North,UPI,,1,1805.31
+1430,2024-03-05,134,Home,Blender,1,460.26,15,North,UPI,4.0,0,391.22
+1431,2024-03-06,314,Electronics,Laptop,4,133.59,15,West,Debit Card,2.8,0,454.21
+1432,2024-03-07,189,Sports,Headphones,5,379.96,15,West,UPI,3.3,0,1614.83
+1433,2024-03-08,363,Electronics,Laptop,1,235.65,15,North,UPI,2.9,0,200.3
+1434,2024-03-09,192,Electronics,Perfume,4,422.57,20,West,UPI,4.2,0,1352.22
+1435,2024-03-10,189,Electronics,Laptop,2,366.95,10,West,UPI,3.0,0,660.51
+1436,2024-03-11,214,Books,Perfume,1,390.45,15,North,Debit Card,3.5,0,331.88
+1437,2024-03-12,204,Beauty,Novel,3,331.51,5,East,PayPal,4.7,0,944.8
+1438,2024-03-13,295,Books,Yoga Mat,1,96.93,5,North,PayPal,3.0,0,92.08
+1439,2024-03-14,213,Beauty,T-Shirt,1,277.05,10,West,Credit Card,3.8,0,249.35
+1440,2024-03-15,174,Electronics,Perfume,4,492.48,0,East,UPI,3.5,0,1969.92
+1441,2024-03-16,316,Sports,Blender,2,469.31,0,South,Debit Card,2.5,0,938.62
+1442,2024-03-17,376,Beauty,Laptop,3,31.15,0,East,Credit Card,4.5,0,93.45
+1443,2024-03-18,348,Home,Perfume,5,90.75,5,West,Credit Card,2.7,0,431.06
+1444,2024-03-19,263,Home,Blender,5,74.54,0,East,PayPal,3.7,0,372.7
+1445,2024-03-20,291,Clothing,Yoga Mat,1,365.72,20,North,Debit Card,,0,292.58
+1446,2024-03-21,326,Beauty,Yoga Mat,4,410.7,15,South,Debit Card,4.1,0,1396.38
+1447,2024-03-22,276,Sports,Laptop,4,114.61,5,South,Debit Card,4.2,0,435.52
+1448,2024-03-23,198,Books,Headphones,5,257.86,10,South,PayPal,3.1,0,1160.37
+1449,2024-03-24,135,Electronics,Laptop,3,421.93,10,West,PayPal,2.5,1,1139.21
+1450,2024-03-25,195,Clothing,Novel,2,369.06,15,West,PayPal,4.3,0,627.4
+1451,2024-03-26,251,Home,Perfume,3,275.69,5,South,PayPal,3.8,0,785.72
+1452,2024-03-27,250,Books,T-Shirt,2,299.26,0,East,PayPal,4.6,0,598.52
+1453,2024-03-28,289,Books,Headphones,5,259.09,0,South,UPI,4.6,1,1295.45
+1454,2024-03-29,323,Electronics,Laptop,2,155.79,20,East,UPI,4.6,0,249.26
+1455,2024-03-30,136,Beauty,Blender,4,286.85,20,East,Debit Card,3.7,0,917.92
+1456,2024-03-31,367,Home,Headphones,1,347.54,0,West,Credit Card,3.3,0,347.54
+1457,2024-04-01,282,Sports,Perfume,1,437.92,10,East,Debit Card,4.5,1,394.13
+1458,2024-04-02,112,Books,Headphones,5,321.77,10,South,Credit Card,3.6,0,1447.96
+1459,2024-04-03,378,Electronics,Perfume,4,382.94,20,West,PayPal,3.0,0,1225.41
+1460,2024-04-04,316,Sports,Laptop,3,88.43,15,North,Credit Card,4.6,0,225.5
+1461,2024-04-05,385,Beauty,Perfume,4,236.15,0,North,Debit Card,4.7,0,944.6
+1462,2024-04-06,372,Home,Headphones,1,14.56,20,West,Debit Card,3.7,0,11.65
+1463,2024-04-07,161,Beauty,Blender,1,130.86,20,South,Credit Card,2.7,0,104.69
+1464,2024-04-08,183,Books,Yoga Mat,4,365.96,0,North,UPI,3.5,0,1463.84
+1465,2024-04-09,316,Sports,Headphones,4,495.98,0,North,PayPal,4.5,0,1983.92
+1466,2024-04-10,286,Sports,Perfume,1,58.59,10,East,PayPal,4.8,0,52.73
+1467,2024-04-11,118,Sports,Yoga Mat,3,206.72,15,East,Debit Card,3.0,1,527.14
+1468,2024-04-12,276,Books,Perfume,5,402.02,15,South,UPI,2.7,0,1708.58
+1469,2024-04-13,199,Books,Blender,5,109.97,0,West,Credit Card,4.7,0,549.85
+1470,2024-04-14,332,Beauty,Perfume,4,281.98,5,South,PayPal,3.5,0,1071.52
+1471,2024-04-15,175,Clothing,Laptop,5,369.19,20,West,UPI,3.9,0,1476.76
+1472,2024-04-16,364,Beauty,T-Shirt,1,311.82,20,North,PayPal,4.9,0,249.46
+1473,2024-04-17,383,Home,Headphones,1,102.12,0,East,UPI,2.7,0,102.12
+1474,2024-04-18,305,Electronics,T-Shirt,4,184.13,5,South,UPI,4.1,0,699.69
+1475,2024-04-19,322,Sports,Perfume,4,394.05,10,South,Debit Card,2.7,0,1418.58
+1476,2024-04-20,151,Clothing,Blender,4,281.56,0,West,PayPal,3.4,0,1126.24
+1477,2024-04-21,243,Electronics,Headphones,3,12.55,0,West,Credit Card,4.5,0,37.65
+1478,2024-04-22,168,Clothing,Perfume,5,382.88,20,South,Debit Card,3.6,0,1531.52
+1479,2024-04-23,198,Beauty,Yoga Mat,4,27.29,0,West,Debit Card,5.0,1,109.16
+1480,2024-04-24,124,Books,Novel,2,375.4,0,South,Credit Card,3.9,0,750.8
+1481,2024-04-25,152,Sports,Perfume,2,109.21,0,South,Debit Card,3.3,1,218.42
+1482,2024-04-26,250,Beauty,T-Shirt,1,479.45,20,South,UPI,3.1,0,383.56
+1483,2024-04-27,243,Electronics,Headphones,5,190.28,10,North,UPI,3.4,1,856.26
+1484,2024-04-28,156,Electronics,T-Shirt,4,170.19,10,West,PayPal,3.4,0,612.68
+1485,2024-04-29,138,Electronics,Headphones,2,82.95,0,East,PayPal,2.7,0,165.9
+1486,2024-04-30,208,Electronics,Perfume,5,159.74,20,East,Credit Card,3.4,0,638.96
+1487,2024-05-01,280,Electronics,Laptop,1,439.55,10,West,PayPal,3.7,0,395.6
+1488,2024-05-02,141,Clothing,Yoga Mat,3,498.19,10,South,UPI,4.3,0,1345.11
+1489,2024-05-03,285,Beauty,Perfume,5,190.46,10,East,Credit Card,4.1,0,857.07
+1490,2024-05-04,322,Sports,T-Shirt,5,229.81,20,East,Credit Card,4.3,0,919.24
+1491,2024-05-05,221,Books,Novel,3,363.8,20,West,PayPal,2.5,0,873.12
+1492,2024-05-06,232,Books,Novel,5,444.23,0,East,UPI,3.0,0,2221.15
+1493,2024-05-07,262,Beauty,Blender,1,300.58,15,South,Credit Card,4.2,0,255.49
+1494,2024-05-08,314,Beauty,Headphones,1,201.84,10,West,UPI,3.7,0,181.66
+1495,2024-05-09,320,Books,T-Shirt,3,212.17,15,South,UPI,2.5,0,541.03
+1496,2024-05-10,334,Books,Blender,4,350.84,20,East,UPI,,0,1122.69
+1497,2024-05-11,245,Clothing,T-Shirt,2,11.57,20,East,PayPal,4.4,0,18.51
+1498,2024-05-12,338,Home,Headphones,4,313.59,20,South,Debit Card,3.9,0,1003.49
+1499,2024-05-13,175,Sports,Perfume,5,184.18,15,North,Debit Card,2.7,0,782.77
+1500,2024-05-14,108,Electronics,Perfume,2,399.15,20,East,Credit Card,4.4,0,638.64
