@@ -110,7 +110,7 @@ def render_sidebar(df: pd.DataFrame = None):
         # Groq API Key input
         groq_key = st.text_input(
             "Groq API Key",
-            value=AppConfig.GROQ_API_KEY or "",
+            value="Login Required" or "",
             type="password",
             help="Get your free key at console.groq.com"
         )
