@@ -7,10 +7,34 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load .env for local development (harmless no-op on Streamlit Cloud)
 load_dotenv()
 
 BASE_DIR = Path(__file__).parent.parent
+def get_groq_key() -> str:
+    """
+    Resolve the Groq API key at RUNTIME (not import time).
+ 
+    Priority order:
+      1. AppConfig.GROQ_API_KEY  — set by sidebar input at runtime
+      2. st.secrets["GROQ_API_KEY"] — Streamlit Cloud secrets
+      3. os.environ / .env file  — local development
+    """
+    # 1. Sidebar may have set this directly on the class
+    runtime_key = getattr(AppConfig, "_runtime_key", "")
+    if runtime_key:
+        return runtime_key
+ 
+    try:
+        import streamlit as st
+        key = st.secrets["GROQ_API_KEY"]
+        if key:
+            return key
+    except Exception:
+        pass
+ 
+    # 3. Environment variable / .env file
+    return os.getenv("GROQ_API_KEY", "")
 
 
 class AppConfig:
@@ -23,30 +47,44 @@ class AppConfig:
     ALLOWED_EXTENSIONS: list = ["csv"]
 
     # ── Groq API ───────────────────────────────────────────────
-    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
-    GROQ_TIMEOUT: int = 30  # seconds per request
+    # DO NOT set this to os.getenv() here — it would be read at
+    # import time before st.secrets is ready on Streamlit Cloud.
+    # Use get_groq_key() everywhere instead.
+    # The sidebar writes to _runtime_key to override at runtime.
+    _runtime_key: str = ""
+    GROQ_TIMEOUT: int = 30
+
+    @classmethod
+    def set_groq_key(cls, key: str):
+        """Called by sidebar when user types in a key."""
+        cls._runtime_key = key.strip()
+
+    @classmethod
+    def get_groq_key(cls) -> str:
+        """Alias so AIEngine can call AppConfig.get_groq_key()."""
+        return get_groq_key()
 
     # ── Groq Model Options ─────────────────────────────────────
     MODELS: dict = {
         "openai/gpt-oss-120b": {
-            "name": "GPT-OSS 120B (Best)",
-            "max_tokens": 1024,
-            "temperature": 0.3,
+            "name": "GPT-OSS 120B ⭐ Best",
+            "max_tokens": 4096,
+            "temperature": 0.2,
         },
         "openai/gpt-oss-20b": {
-            "name": "GPT-OSS 20B (Fast)",
-            "max_tokens": 1024,
-            "temperature": 0.3,
+            "name": "GPT-OSS 20B ⚡ Fast",
+            "max_tokens": 4096,
+            "temperature": 0.2,
         },
         "qwen/qwen3-32b": {
-            "name": "Qwen3 32B (Balanced)",
-            "max_tokens": 1024,
-            "temperature": 0.3,
+            "name": "Qwen3 32B ⚖️ Balanced",
+            "max_tokens": 4096,
+            "temperature": 0.2,
         },
         "openai/gpt-oss-safeguard-20b": {
-            "name": "GPT-OSS Safeguard 20B",
-            "max_tokens": 1024,
-            "temperature": 0.3,
+            "name": "GPT-OSS Safeguard 20B 🛡️",
+            "max_tokens": 4096,
+            "temperature": 0.2,
         },
     }
 
@@ -54,9 +92,9 @@ class AppConfig:
     FALLBACK_ORDER: list = list(MODELS.keys())
 
     # ── Data Profiling ─────────────────────────────────────────
-    SAMPLE_SIZE_FOR_AI: int = 5          # rows to show AI as sample
-    CATEGORICAL_THRESHOLD: int = 50      # max unique values to treat as categorical
-    HIGH_CARDINALITY_THRESHOLD: int = 0.9  # if unique_ratio > this → skip AI chart
+    SAMPLE_SIZE_FOR_AI: int = 5
+    CATEGORICAL_THRESHOLD: int = 50
+    HIGH_CARDINALITY_THRESHOLD: float = 0.9
 
     # ── Chart Generation ───────────────────────────────────────
     MIN_CHARTS: int = 5
@@ -98,5 +136,7 @@ class AppConfig:
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     LOG_FILE: str = str(BASE_DIR / "app.log")
 
+    # ── Paths ──────────────────────────────────────────────────
+    SAMPLE_DATA_DIR: Path = BASE_DIR / "sample_data"
     # ── Paths ──────────────────────────────────────────────────
     SAMPLE_DATA_DIR: Path = BASE_DIR / "sample_data"
