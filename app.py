@@ -108,14 +108,22 @@ def render_sidebar(df: pd.DataFrame = None):
         st.session_state.selected_model = selected
 
         # Groq API Key input
+        # Never pre-fill the value — keeps the key hidden even from the eye icon
         groq_key = st.text_input(
-            "Groq API Key",
-            value="Login Required" or "",
+            "Groq API Key (optional)",
+            value="",
             type="password",
-            help="Get your free key at console.groq.com"
+            placeholder="Already set via Secrets" if AppConfig.get_groq_key() else "gsk_...",
+            help="Only needed if not set in Streamlit Secrets. Get key at console.groq.com"
         )
         if groq_key:
-            AppConfig.GROQ_API_KEY = groq_key
+            AppConfig.set_groq_key(groq_key)
+
+        # Show status indicator instead of the key itself
+        if AppConfig.get_groq_key():
+            st.success("✅ API key active", icon="🔑")
+        else:
+            st.warning("⚠️ No API key set", icon="🔑")
 
         st.markdown("---")
         st.markdown("### 📁 Sample Datasets")
