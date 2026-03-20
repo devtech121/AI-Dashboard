@@ -34,8 +34,13 @@ class AIEngine:
 
     def __init__(self, model: str = None):
         self.model = model or AppConfig.DEFAULT_MODEL
-        self.api_key = AppConfig.GROQ_API_KEY
         self._fallback_order = list(AppConfig.FALLBACK_ORDER)
+        # NOTE: do NOT cache the key here — always read it fresh
+        # via self._get_api_key() so sidebar/secrets changes take effect
+
+    def _get_api_key(self) -> str:
+        """Always resolve the key fresh — never cached on self."""
+        return AppConfig.get_groq_key()
 
     @st.cache_data(show_spinner=False)
     def analyze(_self, profile: dict) -> dict:
@@ -96,14 +101,15 @@ class AIEngine:
         starting_model: str = None,
     ) -> str | None:
         """Try each model in fallback order until one succeeds."""
-        if not self.api_key:
-            logger.warning("No Groq API key — skipping AI call")
+        api_key = self._get_api_key()
+        if not api_key:
+            logger.warning("No Groq API key found in st.secrets or environment — skipping AI call")
             return None
 
         models_to_try = self._get_fallback_order(starting_model or self.model)
         for model_id in models_to_try:
             try:
-                result = self._call_model(model_id, prompt, max_tokens, temperature)
+                result = self._call_model(model_id, prompt, max_tokens, temperature, api_key)
                 if result:
                     logger.info(f"Groq response from: {model_id}")
                     return result
@@ -125,9 +131,10 @@ class AIEngine:
         prompt: str,
         max_tokens: int,
         temperature: float,
+        api_key: str,
     ) -> str | None:
         """Make a single Groq chat completion call."""
-        client = _get_groq_client(self.api_key)
+        client = _get_groq_client(api_key)
         response = client.chat.completions.create(
             model=model_id,
             messages=[
