@@ -43,6 +43,12 @@ ALLOWED_AST_NODES = {
     ast.Module, ast.Expression,
 }
 
+# Python 3.14 removed ast.Num/ast.Str/ast.NameConstant; they are covered by ast.Constant.
+try:
+    ALLOWED_AST_NODES.update({ast.Num, ast.Str, ast.NameConstant})
+except Exception:
+    pass
+
 # Names that are NEVER allowed as identifiers
 FORBIDDEN_NAMES = {
     "__import__", "__builtins__", "__class__", "__bases__", "__subclasses__",
