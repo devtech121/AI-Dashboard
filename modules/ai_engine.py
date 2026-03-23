@@ -1,11 +1,5 @@
 """
 AI Engine Module — Groq API with multi-model fallback.
-
-Fixes:
-  #3  GROQ_TIMEOUT via httpx — client now pooled per-instance (Issue #4 fix: no leak)
-  #6  @st.cache_data removed
-  #7  Sample rows require explicit opt-in
-  Prompt: complete rewrite for 30x quality improvement
 """
 
 import json
