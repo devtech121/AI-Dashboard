@@ -29,7 +29,7 @@ ALLOWED_AST_NODES = {
     ast.Assign, ast.AugAssign, ast.Expr, ast.Return,
     ast.BoolOp, ast.BinOp, ast.UnaryOp, ast.Compare, ast.Call,
     ast.IfExp, ast.Attribute, ast.Subscript, ast.Index, ast.Slice,
-    ast.Name, ast.Constant, ast.Num, ast.Str, ast.NameConstant,
+    ast.Name, ast.Constant,
     ast.List, ast.Tuple, ast.Dict, ast.Set,
     ast.ListComp, ast.DictComp, ast.SetComp, ast.GeneratorExp,
     ast.comprehension,
@@ -43,11 +43,11 @@ ALLOWED_AST_NODES = {
     ast.Module, ast.Expression,
 }
 
-# Python 3.14 removed ast.Num/ast.Str/ast.NameConstant; they are covered by ast.Constant.
-try:
-    ALLOWED_AST_NODES.update({ast.Num, ast.Str, ast.NameConstant})
-except Exception:
-    pass
+# Python 3.14 removed ast.Num/ast.Str/ast.NameConstant; only add if present.
+for _name in ("Num", "Str", "NameConstant"):
+    _node = getattr(ast, _name, None)
+    if _node is not None:
+        ALLOWED_AST_NODES.add(_node)
 
 # Names that are NEVER allowed as identifiers
 FORBIDDEN_NAMES = {
