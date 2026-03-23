@@ -28,6 +28,7 @@ from utils.helpers import setup_logging, apply_custom_css
 from modules.data_loader import DataLoader
 from modules.profiler import DataProfiler
 from modules.ai_engine import AIEngine
+from modules.analysis_verifier import AnalysisVerifier
 from modules.kpi_generator import KPIGenerator
 from modules.chart_generator import ChartGenerator
 from modules.insights_generator import InsightsGenerator
@@ -55,6 +56,9 @@ def initialize_session_state():
         "file_processed": False,
         "processing_error": None,
         "selected_model": AppConfig.DEFAULT_MODEL,
+        "sample_data_consent": False,   # Issue #7: opt-in for sending rows to LLM
+        "ai_analysis_cache": {},
+        "custom_charts": [],
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -103,6 +107,7 @@ def render_sidebar(df: pd.DataFrame = None):
             model_options,
             index=model_options.index(st.session_state.selected_model)
             if st.session_state.selected_model in model_options else 0,
+            format_func=lambda m: AppConfig.MODELS.get(m, {}).get("name", m),
             help="Select AI model for analysis. Falls back automatically if unavailable."
         )
         st.session_state.selected_model = selected
@@ -124,6 +129,38 @@ def render_sidebar(df: pd.DataFrame = None):
             st.success("✅ API key active", icon="🔑")
         else:
             st.warning("⚠️ No API key set", icon="🔑")
+
+        # Claude API Key input (Anthropic)
+        claude_key = st.text_input(
+            "Claude API Key (optional)",
+            value="",
+            type="password",
+            placeholder="Already set via Secrets" if AppConfig.get_claude_key() else "sk-ant-...",
+            help="Only needed if not set in Streamlit Secrets. Get key at console.anthropic.com"
+        )
+        if claude_key:
+            AppConfig.set_claude_key(claude_key)
+
+        if AppConfig.get_claude_key():
+            st.success("Claude key active", icon="🔑")
+        else:
+            st.warning("No Claude key set", icon="🔑")
+
+        # Issue #7: Explicit opt-in before sending any raw data rows to LLM
+        st.markdown("---")
+        st.markdown("### 🔒 Data Privacy")
+        consent = st.checkbox(
+            "Send sample rows to AI for richer insights",
+            value=st.session_state.get("sample_data_consent", False),
+            help=(
+                "When enabled, up to 2 sample rows from your dataset are included "
+                "in the prompt sent to Groq. Disabled by default to protect your data."
+            ),
+            key="sample_data_consent_widget"
+        )
+        st.session_state.sample_data_consent = consent
+        if consent:
+            st.caption("⚠️ Sample rows will be sent to Groq's API.")
 
         st.markdown("---")
         st.markdown("### 📁 Sample Datasets")
@@ -181,11 +218,16 @@ def render_filters(df: pd.DataFrame):
             if selected_vals:
                 filters_applied[col] = selected_vals
 
-    # Numeric range filters (first 2)
+    # Numeric range filters (first 2) — Issue #4: guard against all-NaN columns
     for col in numeric_cols[:2]:
-        col_min = float(df[col].min())
-        col_max = float(df[col].max())
-        if col_min != col_max:
+        series = df[col].dropna()
+        if len(series) == 0:
+            continue  # skip fully-NaN columns — st.slider would crash
+        col_min = float(series.min())
+        col_max = float(series.max())
+        if col_min == col_max or not (col_min == col_min) or not (col_max == col_max):
+            continue  # skip if range is zero or values are still NaN after dropna
+        try:
             range_val = st.slider(
                 f"{col} range",
                 min_value=col_min,
@@ -195,8 +237,63 @@ def render_filters(df: pd.DataFrame):
             )
             if range_val != (col_min, col_max):
                 filters_applied[col] = range_val
+        except Exception as e:
+            logger.warning(f"Slider failed for column '{col}': {e}")
 
     st.session_state.active_filters = filters_applied
+
+
+def compute_df_hash(df: pd.DataFrame) -> str:
+    """Compute a stable hash for a dataframe (values + columns)."""
+    import hashlib
+    import pandas as pd
+    h = hashlib.sha256()
+    try:
+        values_hash = pd.util.hash_pandas_object(df, index=True).values.tobytes()
+        h.update(values_hash)
+    except Exception:
+        h.update(df.to_csv(index=True).encode("utf-8"))
+    h.update("|".join([str(c) for c in df.columns]).encode("utf-8"))
+    return h.hexdigest()
+
+
+def extract_columns_from_text(text: str, columns: list) -> list:
+    if not text:
+        return []
+    import re
+    found = []
+    lower = text.lower()
+    for col in columns:
+        c = str(col)
+        # Word-boundary match first, fallback to substring
+        pattern = r"\b" + re.escape(c.lower()) + r"\b"
+        if re.search(pattern, lower) or c.lower() in lower:
+            found.append(c)
+    return found
+
+
+def extract_json_block(text: str) -> dict | None:
+    if not text:
+        return None
+    import json, re
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    for pat in [r"```json\s*(.*?)\s*```", r"```\s*(.*?)\s*```"]:
+        m = re.search(pat, text, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(1))
+            except Exception:
+                pass
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end > start:
+        try:
+            return json.loads(text[start:end+1])
+        except Exception:
+            return None
+    return None
 
 
 def apply_filters(df: pd.DataFrame) -> pd.DataFrame:
@@ -219,56 +316,80 @@ def apply_filters(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def process_uploaded_file(uploaded_file):
-    """Process uploaded CSV file and run full AI pipeline."""
+    """
+    Process uploaded CSV file and run full AI pipeline.
+
+    Issue #6: Results are stored in st.session_state (per-session scope).
+    We no longer rely on @st.cache_data on profiler/anomaly/ai_engine, which
+    caches globally and can leak one user's data to another in shared deployments.
+    """
     progress_bar = st.progress(0)
     status_text = st.empty()
 
     try:
-        # Step 1: Load data
+        # Step 1: Load & preprocess
         status_text.text("📂 Loading and validating data...")
         progress_bar.progress(10)
         loader = DataLoader()
         df = loader.load(uploaded_file)
         st.session_state.df = df
 
-        # Step 2: Profile data
+        # Step 2: Profile (no cache — stored in session_state)
         status_text.text("🔬 Profiling dataset...")
-        progress_bar.progress(25)
+        progress_bar.progress(22)
         profiler = DataProfiler()
         profile = profiler.profile(df)
         st.session_state.profile = profile
 
-        # Step 3: Detect anomalies
+        # Step 3: Anomaly detection (no cache — stored in session_state)
         status_text.text("🚨 Detecting anomalies...")
-        progress_bar.progress(40)
+        progress_bar.progress(38)
         detector = AnomalyDetector()
         anomalies = detector.detect(df, profile)
         st.session_state.anomalies = anomalies
 
-        # Step 4: AI analysis
+        # Step 4: AI analysis (no cache — Issue #6)
+        # Issue #7: only include sample rows if user explicitly opted in
         status_text.text("🤖 Running AI analysis (this may take a moment)...")
-        progress_bar.progress(55)
-        ai_engine = AIEngine(model=st.session_state.selected_model)
-        ai_analysis = ai_engine.analyze(profile)
+        progress_bar.progress(52)
+        include_samples = st.session_state.get("sample_data_consent", False)
+        df_hash = compute_df_hash(df)
+        cache_key = f"{df_hash}:{st.session_state.selected_model}:{include_samples}"
+        cache = st.session_state.get("ai_analysis_cache", {})
+        if cache_key in cache:
+            ai_analysis = cache[cache_key]
+            logger.info("AI analysis cache hit")
+        else:
+            ai_engine = AIEngine(model=st.session_state.selected_model)
+            ai_analysis = ai_engine.analyze(profile, include_sample_data=include_samples)
+            cache[cache_key] = ai_analysis
+            st.session_state.ai_analysis_cache = cache
+        st.session_state.ai_analysis = ai_analysis
+
+        # Step 4b: Verify & repair AI output (pure Python, instant)
+        status_text.text("🔍 Verifying AI suggestions...")
+        progress_bar.progress(62)
+        verifier = AnalysisVerifier()
+        ai_analysis = verifier.verify(ai_analysis, profile)
         st.session_state.ai_analysis = ai_analysis
 
         # Step 5: Generate KPIs
         status_text.text("📊 Generating KPIs...")
-        progress_bar.progress(70)
+        progress_bar.progress(72)
         kpi_gen = KPIGenerator()
         kpis = kpi_gen.generate(df, profile, ai_analysis)
         st.session_state.kpis = kpis
 
         # Step 6: Generate charts
         status_text.text("📈 Building charts...")
-        progress_bar.progress(82)
+        progress_bar.progress(84)
         chart_gen = ChartGenerator()
         charts = chart_gen.generate(df, profile, ai_analysis)
         st.session_state.charts = charts
 
         # Step 7: Generate insights
         status_text.text("💡 Extracting insights...")
-        progress_bar.progress(93)
+        progress_bar.progress(94)
         insights_gen = InsightsGenerator()
         insights = insights_gen.generate(df, profile, ai_analysis, anomalies)
         st.session_state.insights = insights
@@ -322,6 +443,103 @@ def render_upload_section():
     return uploaded_file
 
 
+def generate_custom_chart(question: str, df: pd.DataFrame, profile: dict):
+    # Use the selected LLM to propose a single chart and build it.
+    ai = AIEngine(model=st.session_state.get("selected_model", AppConfig.DEFAULT_MODEL))
+    cols = [c["name"] for c in profile.get("columns", [])]
+    prompt = f"""Return ONLY valid JSON for ONE chart.
+No markdown. No explanation.
+
+Allowed columns: {cols}
+
+Schema:
+{{
+  "type": "bar|line|pie|scatter|histogram",
+  "x": "exact_col_name",
+  "y": "exact_col_name_or_null",
+  "color": "exact_col_name_or_null",
+  "title": "clear descriptive title",
+  "description": "what the chart reveals",
+  "aggregation": "sum|mean|count|null"
+}}
+
+Rules:
+1. Avoid ID-like columns entirely.
+2. For bar charts with numerical y, set aggregation explicitly.
+3. Prefer color grouping for categorical segmentation if it improves readability.
+
+User request: {question}
+"""
+    raw = ai.call(prompt=prompt, max_tokens=350, temperature=0.1)
+    chart_def = extract_json_block(raw)
+    if not isinstance(chart_def, dict):
+        return None
+    verifier = AnalysisVerifier()
+    chart_def = verifier.validate_single_chart(chart_def, profile)
+    if not chart_def:
+        return None
+    x = chart_def.get("x")
+    y = chart_def.get("y")
+    color = chart_def.get("color")
+    chart_type = chart_def.get("type", "bar")
+    valid_cols = set(df.columns)
+    if x not in valid_cols:
+        return None
+    if y and y not in valid_cols:
+        return None
+    if color and color not in valid_cols:
+        color = None
+    gen = ChartGenerator()
+    fig = gen._build_figure(df, chart_type, x, y, chart_def, color_col=color)
+    if fig is None:
+        return None
+    return {
+        "title": chart_def.get("title", f"{x} chart"),
+        "description": chart_def.get("description", ""),
+        "figure": fig,
+        "type": chart_type,
+        "x": x,
+        "y": y,
+        "color": color,
+        "source": "custom",
+    }
+
+
+def render_audit_panel(profile: dict, ai_analysis: dict, df: pd.DataFrame):
+    # Explainability panel: columns used and active filters.
+    with st.expander("Audit / Explainability", expanded=False):
+        cols = [c["name"] for c in profile.get("columns", [])]
+        st.markdown("**Model**: " + st.session_state.get("selected_model", AppConfig.DEFAULT_MODEL))
+        st.markdown("**Sample Rows Sent**: " + ("Yes" if st.session_state.get("sample_data_consent") else "No"))
+        filters = st.session_state.get("active_filters", {})
+        if filters:
+            st.markdown("**Active Filters**")
+            for k, v in filters.items():
+                st.markdown(f"- {k}: {v}")
+        else:
+            st.markdown("**Active Filters**: None")
+
+        st.markdown("**KPI Columns**")
+        for kpi in ai_analysis.get("kpis", []):
+            st.markdown(f"- {kpi.get('label','KPI')}: {kpi.get('column')} ({kpi.get('aggregation')})")
+
+        st.markdown("**Chart Columns**")
+        for ch in ai_analysis.get("charts", []):
+            st.markdown(f"- {ch.get('title','Chart')}: x={ch.get('x')} y={ch.get('y')} color={ch.get('color')}")
+
+        custom = st.session_state.get("custom_charts", [])
+        if custom:
+            st.markdown("**Custom Chart Columns**")
+            for ch in custom:
+                st.markdown(f"- {ch.get('title','Custom')}: x={ch.get('x')} y={ch.get('y')} color={ch.get('color')}")
+
+        st.markdown("**Insights: Columns Mentioned**")
+        for ins in ai_analysis.get("insights", []):
+            used = extract_columns_from_text(ins, cols)
+            st.markdown(f"- {ins}")
+            st.caption("Columns: " + (", ".join(used) if used else "None detected"))
+
+
 def render_dashboard():
     """Render the full dashboard with all components."""
     df = st.session_state.df
@@ -339,14 +557,45 @@ def render_dashboard():
 
     # Charts Section
     st.markdown("---")
-    st.markdown("### 📈 Visual Analytics")
+    st.markdown("### Visual Analytics")
+
+    # Custom chart request
+    st.markdown("**Custom Chart Request**")
+    custom_prompt = st.text_input(
+        "Describe a chart you want to see",
+        value="",
+        key="custom_chart_prompt",
+        placeholder="e.g., Show average sales by region as a bar chart"
+    )
+    if st.button("Generate Chart", key="custom_chart_btn"):
+        if custom_prompt.strip():
+            with st.spinner("Building your chart..."):
+                chart = generate_custom_chart(custom_prompt, filtered_df, st.session_state.profile)
+            if chart:
+                st.session_state.custom_charts.append(chart)
+                st.success("Custom chart added.")
+                st.rerun()
+            else:
+                st.warning("Could not build that chart. Try a simpler request with clear column names.")
+        else:
+            st.warning("Please describe the chart you want.")
+
+    charts = list(st.session_state.charts or [])
+    charts.extend(st.session_state.get("custom_charts", []))
     chart_renderer = ChartRenderer()
-    chart_renderer.render(st.session_state.charts, filtered_df, st.session_state.profile)
+    chart_renderer.render(charts, filtered_df, st.session_state.profile)
 
     # Insights Section
     st.markdown("---")
     st.markdown("### 💡 AI-Generated Insights")
     DashboardRenderer.render_insights(st.session_state.insights, st.session_state.anomalies)
+
+    # Explainability
+    render_audit_panel(st.session_state.profile, {
+        "kpis": st.session_state.kpis or [],
+        "charts": st.session_state.ai_analysis.get("charts", []) if st.session_state.ai_analysis else [],
+        "insights": st.session_state.insights or [],
+    }, filtered_df)
 
     # Data Explorer
     st.markdown("---")
@@ -366,7 +615,8 @@ def render_dashboard():
 
 def render_chat_section(df: pd.DataFrame):
     """Render the chat interface for data Q&A."""
-    chat_engine = ChatEngine()
+    # Issue #2 fix: pass the user's selected model to ChatEngine
+    chat_engine = ChatEngine(model=st.session_state.get("selected_model", AppConfig.DEFAULT_MODEL))
 
     # Display chat history
     for msg in st.session_state.chat_history:
@@ -395,7 +645,16 @@ def render_chat_section(df: pd.DataFrame):
                     profile=st.session_state.profile
                 )
 
-            st.markdown(response["answer"])
+            # Stream the answer for a faster, more interactive feel
+            try:
+                import time
+                def _chunk_text(s, size=80):
+                    for i in range(0, len(s), size):
+                        yield s[i:i+size]
+                        time.sleep(0.01)
+                st.write_stream(_chunk_text(response["answer"]))
+            except Exception:
+                st.markdown(response["answer"])
 
             if response.get("code"):
                 with st.expander("🔍 Generated Code"):

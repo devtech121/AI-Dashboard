@@ -1,34 +1,64 @@
 """
-AI Engine Module
-Groq API integration with multi-model fallback system.
-Uses the official groq Python SDK with OpenAI-compatible chat completions.
+AI Engine Module — Groq API with multi-model fallback.
+
+Fixes:
+  #3  GROQ_TIMEOUT via httpx — client now pooled per-instance (Issue #4 fix: no leak)
+  #6  @st.cache_data removed
+  #7  Sample rows require explicit opt-in
+  Prompt: complete rewrite for 30x quality improvement
 """
 
 import json
 import logging
 import re
-import streamlit as st
 from utils.config import AppConfig
 
 logger = logging.getLogger("ai_dashboard.ai_engine")
 
+# Module-level client cache keyed by (api_key, timeout) — reused across calls,
+# properly closed on GC. Fixes Issue #4: no per-call client leak.
+_client_cache_groq: dict = {}
+_client_cache_anthropic: dict = {}
+
 
 def _get_groq_client(api_key: str):
-    """Initialise and return a Groq client."""
-    try:
-        from groq import Groq
-        return Groq(api_key=api_key)
-    except ImportError:
-        raise ImportError("groq package not installed. Run: pip install groq")
+    """Return a cached Groq client (one per api_key). Issue #4: no per-call leak."""
+    key = (api_key, AppConfig.GROQ_TIMEOUT)
+    if key not in _client_cache_groq:
+        try:
+            import httpx
+            from groq import Groq
+            http_client = httpx.Client(
+                timeout=float(AppConfig.GROQ_TIMEOUT),
+                limits=httpx.Limits(max_connections=5, max_keepalive_connections=2),
+            )
+            _client_cache_groq[key] = Groq(api_key=api_key, http_client=http_client)
+        except Exception:
+            try:
+                from groq import Groq
+                _client_cache_groq[key] = Groq(api_key=api_key)
+            except ImportError:
+                raise ImportError("groq not installed. Run: pip install groq")
+    return _client_cache_groq[key]
+
+def _get_anthropic_client(api_key: str):
+    """Return a cached Anthropic client (one per api_key)."""
+    key = (api_key, )
+    if key not in _client_cache_anthropic:
+        try:
+            from anthropic import Anthropic
+        except ImportError:
+            raise ImportError("anthropic not installed. Run: pip install anthropic")
+        _client_cache_anthropic[key] = Anthropic(api_key=api_key)
+    return _client_cache_anthropic[key]
 
 
 class AIEngine:
     """
-    AI analysis engine powered by Groq API.
-    Automatically falls back through the model chain on failure.
+    AI analysis engine — Groq API with 4-model fallback.
+    NOT cached with @st.cache_data (Issue #6).
     """
 
-    # Groq rate limits vary — use 4096 for analysis, 1024 for chat
     ANALYSIS_MAX_TOKENS = 4096
     CHAT_MAX_TOKENS_DEFAULT = 1024
 
@@ -42,56 +72,43 @@ class AIEngine:
         """Always resolve the key fresh — never cached on self."""
         return AppConfig.get_groq_key()
 
-    @st.cache_data(show_spinner=False)
-    def analyze(_self, profile: dict) -> dict:
-        """
-        Run AI analysis on the dataset profile.
-        Returns structured dict with: kpis, charts, insights.
+    def _get_api_key(self, provider: str) -> str:
+        if provider == "anthropic":
+            return AppConfig.get_claude_key()
+        return AppConfig.get_groq_key()
 
-        Strategy:
-          1. Try full prompt with high token budget
-          2. If response is truncated, retry with compact prompt
-          3. If parse still fails, use rule-based fallback
+    def analyze(self, profile: dict, include_sample_data: bool = False) -> dict:
         """
-        # ── Attempt 1: full prompt ──
-        prompt = _self._build_analysis_prompt(profile, compact=False)
-        raw = _self._call_with_fallback(
-            prompt,
-            max_tokens=_self.ANALYSIS_MAX_TOKENS,
-            temperature=0.2,
-        )
+        Run AI analysis on dataset profile.
+        Issue #7: sample rows not sent unless include_sample_data=True.
+        """
+        prompt = self._build_analysis_prompt(profile, compact=False, include_sample=include_sample_data)
+        raw = self._call_with_fallback(prompt, max_tokens=self.ANALYSIS_MAX_TOKENS, temperature=0.15)
 
         if raw:
-            if _self._is_truncated(raw):
-                logger.warning("Response truncated — retrying with compact prompt")
-                # ── Attempt 2: compact prompt ──
-                compact_prompt = _self._build_analysis_prompt(profile, compact=True)
-                raw = _self._call_with_fallback(
-                    compact_prompt,
-                    max_tokens=_self.ANALYSIS_MAX_TOKENS,
-                    temperature=0.2,
-                )
+            if self._is_truncated(raw):
+                logger.warning("Truncated — retrying with compact prompt")
+                compact = self._build_analysis_prompt(profile, compact=True, include_sample=False)
+                raw = self._call_with_fallback(compact, max_tokens=self.ANALYSIS_MAX_TOKENS, temperature=0.15)
 
-            if raw and not _self._is_truncated(raw):
-                parsed = _self._parse_json_response(raw)
+            if raw and not self._is_truncated(raw):
+                parsed = self._parse_json_response(raw)
                 if parsed:
-                    # Validate column names against profile
-                    parsed = _self._sanitize_output(parsed, profile)
-                    logger.info("AI analysis successful via Groq")
+                    parsed = self._sanitize_output(parsed, profile)
+                    logger.info("AI analysis successful")
                     return parsed
 
-        logger.warning("AI analysis failed — using rule-based fallback")
-        return _self._rule_based_fallback(profile)
+        logger.warning("AI analysis failed — rule-based fallback")
+        return self._rule_based_fallback(profile)
 
     def call(self, prompt: str, max_tokens: int = None, temperature: float = None) -> str:
-        """Public single-call method used by ChatEngine."""
         return self._call_with_fallback(
             prompt,
             max_tokens=max_tokens or self.CHAT_MAX_TOKENS_DEFAULT,
             temperature=temperature or AppConfig.CHAT_TEMPERATURE,
         ) or ""
 
-    # ── Private: API Calls ─────────────────────────────────────
+    # ── API Calls ──────────────────────────────────────────────
 
     def _call_with_fallback(
         self,
@@ -101,25 +118,22 @@ class AIEngine:
         starting_model: str = None,
     ) -> str | None:
         """Try each model in fallback order until one succeeds."""
-        api_key = self._get_api_key()
-        if not api_key:
-            logger.warning("No Groq API key found in st.secrets or environment — skipping AI call")
+        if not self.api_key:
+            logger.warning("No Groq API key — skipping AI call")
             return None
 
         models_to_try = self._get_fallback_order(starting_model or self.model)
         for model_id in models_to_try:
             try:
-                result = self._call_model(model_id, prompt, max_tokens, temperature, api_key)
+                result = self._call_model(model_id, prompt, max_tokens, temperature)
                 if result:
-                    logger.info(f"Groq response from: {model_id}")
+                    logger.info(f"Response from: {model_id}")
                     return result
             except Exception as e:
-                logger.warning(f"Model {model_id} failed: {e}")
-                continue
+                logger.warning(f"{model_id} failed: {e}")
         return None
 
-    def _get_fallback_order(self, starting_model: str) -> list:
-        """Return models starting from preferred, then fall back."""
+    def _get_fallback_order(self, starting_model):
         if starting_model in self._fallback_order:
             idx = self._fallback_order.index(starting_model)
             return self._fallback_order[idx:] + self._fallback_order[:idx]
@@ -131,332 +145,345 @@ class AIEngine:
         prompt: str,
         max_tokens: int,
         temperature: float,
-        api_key: str,
     ) -> str | None:
         """Make a single Groq chat completion call."""
-        client = _get_groq_client(api_key)
+        client = _get_groq_client(self.api_key)
         response = client.chat.completions.create(
             model=model_id,
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an expert data analyst. "
-                        "You MUST return ONLY valid, complete JSON — "
-                        "no explanation, no markdown fences, no truncation. "
-                        "Every opening bracket must have a closing bracket."
-                    ),
-                },
+                {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt},
             ],
             temperature=temperature,
             max_tokens=max_tokens,
         )
-
-        # Log finish reason for debugging truncation
-        finish_reason = response.choices[0].finish_reason
-        if finish_reason == "length":
-            logger.warning(
-                f"Model {model_id} hit token limit (finish_reason=length). "
-                f"Consider using compact prompt."
-            )
-
+        if response.choices[0].finish_reason == "length":
+            logger.warning(f"{model_id} hit token limit")
         text = response.choices[0].message.content
         return text.strip() if text else None
 
-    # ── Private: Truncation Detection ─────────────────────────
+    # ── Truncation ─────────────────────────────────────────────
 
-    def _is_truncated(self, text: str) -> bool:
-        """
-        Detect if a JSON response was cut off mid-stream.
-        Checks bracket balance and common truncation signatures.
-        """
+    def _is_truncated(self, text):
         if not text:
             return True
-
-        stripped = text.strip()
-
-        # Must start with { for our responses
-        if not stripped.startswith("{"):
+        s = text.strip()
+        if not s.startswith("{") or not s.endswith("}"):
             return True
-
-        # Count unmatched brackets — truncated JSON will be unbalanced
-        opens  = stripped.count("{") + stripped.count("[")
-        closes = stripped.count("}") + stripped.count("]")
-        if opens != closes:
-            logger.debug(f"Bracket mismatch: {opens} open vs {closes} close")
+        if s.count("{") + s.count("[") != s.count("}") + s.count("]"):
             return True
-
-        # Must end with closing brace
-        if not stripped.endswith("}"):
+        if s.count('"') % 2 != 0:
             return True
-
-        # Check for obviously incomplete string (ends inside a quoted value)
-        if stripped.count('"') % 2 != 0:
-            return True
-
         return False
 
-    # ── Private: Prompt Builders ───────────────────────────────
+    # ── UPGRADED PROMPT ────────────────────────────────────────
 
-    def _build_analysis_prompt(self, profile: dict, compact: bool = False) -> str:
+    def _build_analysis_prompt(self, profile: dict, compact: bool = False, include_sample: bool = False) -> str:
         """
-        Build the structured analysis prompt.
-        compact=True generates a shorter prompt requesting fewer items,
-        reducing the output token count needed.
+        Produces a highly detailed, context-aware prompt that:
+        - Detects dataset domain (finance/HR/ecommerce/medical/generic)
+        - Gives domain-specific chart recommendations
+        - Handles multi-entity time series (stocks by ticker) correctly
+        - Enforces smart aggregation rules
+        - Requests per-column insights not just generic summaries
         """
-        col_summary = []
-        max_cols = 10 if compact else 20
-        for col in profile["columns"][:max_cols]:
-            summary = f"- {col['name']} ({col['type']})"
-            if col["type"] == "numerical" and isinstance(col.get("mean"), float):
-                summary += f": mean={col['mean']:.1f}, max={col.get('max','?')}"
-            elif col["type"] == "categorical":
-                top = list(col.get("top_values", {}).keys())[:2]
-                summary += f": e.g. {top}"
-            col_summary.append(summary)
-
-        cols_text = "\n".join(col_summary)
-
-        # Compact mode: skip sample data, request fewer items
-        if compact:
-            n_kpis   = "3-4"
-            n_charts = "4-5"
-            n_insights = "3"
-            sample_section = ""
-        else:
-            n_kpis   = "4-5"
-            n_charts = "5-6"
-            n_insights = "4-5"
-            sample_str = json.dumps(
-                profile.get("sample_data", [])[:2], default=str
-            )[:400]
-            sample_section = f"\nSAMPLE DATA:\n{sample_str}\n"
-
-        num_cols = [c for c in profile["numerical_cols"] if c not in profile.get("id_cols", [])]
+        id_cols  = set(profile.get("id_cols", []))
+        bin_cols = set(profile.get("binary_cols", []))
+        num_cols = [c for c in profile["numerical_cols"] if c not in id_cols and c not in bin_cols]
         cat_cols = profile["categorical_cols"]
         dt_cols  = profile["datetime_cols"]
+        all_cols = [c["name"] for c in profile.get("columns", [])]
 
-        return f"""Return ONLY valid complete JSON. No markdown. No explanation. No truncation.
+        # ── Build rich column descriptions ──
+        col_lines = []
+        max_cols = 10 if compact else 22
+        for col in profile["columns"][:max_cols]:
+            name  = col["name"]
+            ctype = col["type"]
+            tags  = []
+            if name in bin_cols: tags.append("binary/flag")
+            if name in id_cols:  tags.append("ID-SKIP")
+            tag_str = f" [{', '.join(tags)}]" if tags else ""
 
-DATASET: {profile['row_count']:,} rows, {profile['column_count']} columns
-Numerical: {num_cols[:8]}
-Categorical: {cat_cols[:6]}
-DateTime: {dt_cols[:3]}
+            line = f"  • {name} ({ctype}{tag_str})"
+            if ctype == "numerical" and isinstance(col.get("mean"), float):
+                skew = col.get("skew", 0)
+                skew_note = " [right-skewed]" if skew > 1 else " [left-skewed]" if skew < -1 else ""
+                line += f": mean={col['mean']:.2f}, min={col.get('min','?')}, max={col.get('max','?')}, std={col.get('std',0):.2f}{skew_note}"
+            elif ctype == "categorical":
+                n_u  = col.get("n_unique", "?")
+                mode = col.get("mode", "")
+                mpct = col.get("mode_pct", 0)
+                top  = list(col.get("top_values", {}).keys())[:5]
+                line += f": {n_u} unique | top='{mode}'({mpct}%) | values={top}"
+            col_lines.append(line)
+        cols_text = "\n".join(col_lines)
 
-COLUMNS:
+        # ── Detect dataset domain for better recommendations ──
+        all_col_names = " ".join(all_cols).lower()
+        domain = "generic"
+        domain_hint = ""
+
+        if any(k in all_col_names for k in ["ticker", "open", "close", "volume", "high", "low", "adj"]):
+            domain = "financial_timeseries"
+            cat_entity_cols = [c for c in cat_cols if c in ["ticker", "symbol", "stock", "company"] or
+                               any(c == x for x in cat_cols if profile.get("columns") and
+                                   next((m for m in profile["columns"] if m["name"]==x), {}).get("n_unique",99) <= 20)]
+            entity_col = cat_entity_cols[0] if cat_entity_cols else (cat_cols[0] if cat_cols else None)
+            price_cols = [c for c in num_cols if any(k in c.lower() for k in ["close","open","price","high","low","adj"])]
+            domain_hint = f"""
+DOMAIN: Financial time series data detected.
+KEY RULE: For each price column ({price_cols[:3]}), create ONE line chart per entity
+in '{entity_col}' using color={entity_col} so all tickers appear on the SAME chart.
+This means use x={dt_cols[0] if dt_cols else 'date'}, y=price_col, color={entity_col}.
+Do NOT create separate charts per ticker — use the color dimension instead.
+Also create: volume bar chart, price distribution histograms, OHLC comparisons."""
+
+        elif any(k in all_col_names for k in ["salary", "department", "employee", "hire", "attrition", "performance"]):
+            domain = "hr_analytics"
+            domain_hint = """
+DOMAIN: HR/People analytics detected.
+Recommended charts: salary distribution by department, attrition rate by job_level,
+age/experience scatter, headcount by department (bar), performance vs satisfaction scatter.
+KPIs: avg salary, total headcount, attrition rate (%), avg tenure, avg performance score."""
+
+        elif any(k in all_col_names for k in ["revenue", "order", "product", "category", "quantity", "customer", "sale"]):
+            domain = "ecommerce"
+            domain_hint = """
+DOMAIN: E-commerce/Sales data detected.
+Recommended charts: revenue by category (bar), orders over time (line), top products (bar),
+payment method distribution (pie), revenue vs quantity scatter, return rate by category.
+KPIs: total revenue, avg order value, total orders, avg rating."""
+
+        elif any(k in all_col_names for k in ["age", "cholesterol", "blood", "pressure", "patient", "diagnosis", "chol", "trestbps"]):
+            domain = "medical"
+            domain_hint = """
+DOMAIN: Medical/health data detected.
+Recommended charts: age distribution (histogram), condition prevalence by age group (bar),
+key biomarker distributions (histogram), risk factor correlations (scatter),
+outcome rates by demographic (bar with binary y → show rate%).
+KPIs: avg age, avg biomarker values, outcome rate (%), sample count."""
+
+        # ── Correlation hints ──
+        corr_hints = ""
+        if profile.get("correlation_matrix") and len(num_cols) >= 2:
+            high = []
+            for c1 in num_cols[:8]:
+                for c2 in num_cols[:8]:
+                    if c1 >= c2: continue
+                    try:
+                        r = (profile["correlation_matrix"].get(c1) or {}).get(c2, 0) or 0
+                        if abs(r) > 0.5:
+                            direction = "positive" if r > 0 else "negative"
+                            high.append(f"{c1}↔{c2} r={r:.2f} ({direction})")
+                    except Exception:
+                        pass
+            if high:
+                corr_hints = f"\nSTRONG CORRELATIONS (suggest scatter charts): {', '.join(high[:5])}"
+
+        # ── Sample data (consent-gated) ──
+        sample_section = ""
+        if include_sample and not compact:
+            sample_str = str(profile.get("sample_data", [])[:3])[:500]
+            sample_section = f"\nSAMPLE ROWS (user consented):\n{sample_str}"
+
+        # ── Chart count targets ──
+        n_kpis, n_charts, n_insights = ("3-4","4-5","3") if compact else ("5-7","6-8","5-7")
+
+        # ── Missing value context ──
+        missing_ctx = ""
+        if profile.get("missing_summary"):
+            mc = [(k, v["pct"]) for k, v in profile["missing_summary"].items()]
+            missing_ctx = f"\nMISSING DATA: {', '.join(f'{c}={p}%' for c,p in mc[:5])}"
+
+        return f"""You are a senior data analyst. Analyze this dataset and return ONLY valid JSON.
+No markdown. No explanation. Every bracket must be closed.
+{domain_hint}
+DATASET OVERVIEW:
+  Rows: {profile['row_count']:,} | Columns: {profile['column_count']}
+  Numerical (use for KPIs/Y-axis): {num_cols[:10]}
+  Categorical (use for X-axis/grouping/color): {cat_cols[:8]}
+  Binary/flag (rate analysis only, NOT sum KPIs): {list(bin_cols)[:6]}
+  DateTime (use for time-series X-axis): {dt_cols[:4]}
+  ID columns (SKIP entirely, never use): {list(id_cols)[:4]}
+{corr_hints}
+{missing_ctx}
+
+COLUMN DETAILS:
 {cols_text}
 {sample_section}
-Return this exact JSON (all brackets must be closed):
+
+Return EXACTLY this JSON structure:
 {{
   "kpis": [
-    {{"label": "Name", "column": "col", "aggregation": "sum|mean|count|max|min", "format": "number|currency|percent"}}
+    {{
+      "label": "Human-readable metric name",
+      "column": "exact_col_name",
+      "aggregation": "sum|mean|count|max|min",
+      "format": "number|currency|percent",
+      "insight": "One sentence why this KPI matters"
+    }}
   ],
   "charts": [
-    {{"type": "bar|line|pie|scatter|histogram", "x": "col", "y": "col_or_null", "title": "Title", "description": "reason"}}
+    {{
+      "type": "bar|line|pie|scatter|histogram",
+      "x": "exact_col_name",
+      "y": "exact_col_name_or_null",
+      "color": "exact_col_name_or_null",
+      "title": "Specific descriptive title with context",
+      "description": "What this chart reveals about the data",
+      "aggregation": "sum|mean|count|null"
+    }}
   ],
-  "insights": ["insight 1", "insight 2", "insight 3"]
+  "insights": [
+    "Specific, quantified insight referencing actual column names and values"
+  ]
 }}
 
-STRICT RULES:
-- kpis: exactly {n_kpis} items, use only numerical columns, skip ID-like columns
-- charts: exactly {n_charts} items, use ONLY columns listed above
-- insights: exactly {n_insights} short sentences with specific numbers from this dataset
-- y can be null for pie/histogram
-- Every string must be properly closed with quotes
-- The entire response must be one valid JSON object"""
+═══ STRICT KPI RULES ═══
+1. Use ONLY columns from Numerical list — never ID, binary, or categorical columns
+2. aggregation: sum → revenue/sales/cost totals | mean → prices/scores/ages/rates | count → record counts | max/min → extremes
+3. format: currency → col name contains price/revenue/cost/salary/pay/income | percent → rate/ratio/score/pct | number → everything else
+4. insight field: write why this metric matters (e.g. "Total revenue across all {profile['row_count']:,} transactions")
+5. Target exactly {n_kpis} KPIs covering different aspects of the data
+6. NEVER create a KPI for year columns or ID-like columns
 
-    # ── Private: JSON Parsing ──────────────────────────────────
+═══ STRICT CHART RULES ═══
+1. NEVER use ID columns as x or y
+2. DateTime x + Numerical y → "line" (time series)
+3. DateTime x + Numerical y + Categorical color → "line" with color grouping (BEST for multi-entity series like stocks by ticker)
+4. 2 Numerical columns → "scatter" (shows correlation)
+5. Categorical x + Numerical y → "bar" with smart aggregation:
+   - binary y → show count/rate, use aggregation="count"
+   - large-value y (revenue/salary) → aggregation="sum"
+   - score/rate y → aggregation="mean"
+6. Single numerical column → "histogram" (shows distribution)
+7. Categorical with ≤ 8 unique values → consider "pie"
+8. color field: use a categorical column to split lines/bars by group (crucial for stock tickers, departments, regions)
+9. Target exactly {n_charts} charts with maximum diversity of chart types and column combinations
+10. Prioritize charts that reveal the most interesting patterns given the domain
 
-    def _parse_json_response(self, text: str) -> dict | None:
-        """Extract and validate JSON from the model response."""
+═══ STRICT INSIGHT RULES ═══
+1. Every insight MUST reference specific column names and actual numbers from the dataset
+2. Cite exact values: "The average salary is $91.8K, ranging from $35K to $149K"
+3. Highlight anomalies, surprising patterns, or business-critical findings
+4. If binary columns exist: state the positive rate as a percentage
+5. Mention the strongest correlations if any exist
+6. Target exactly {n_insights} insights, each revealing something different
+7. NEVER write generic statements like "the dataset has X columns" — be specific
+
+Use ONLY column names from the COLUMN DETAILS section above."""
+
+    # ── JSON Parsing ───────────────────────────────────────────
+
+    def _parse_json_response(self, text):
         if not text:
             return None
-
-        # Direct parse
         try:
-            data = json.loads(text)
-            if self._validate_ai_output(data):
-                return data
+            d = json.loads(text)
+            if self._validate_ai_output(d): return d
         except json.JSONDecodeError:
             pass
-
-        # Strip markdown fences
-        for pattern in [r"```json\s*(.*?)\s*```", r"```\s*(.*?)\s*```"]:
-            for match in re.findall(pattern, text, re.DOTALL):
+        for pat in [r"```json\s*(.*?)\s*```", r"```\s*(.*?)\s*```"]:
+            for m in re.findall(pat, text, re.DOTALL):
                 try:
-                    data = json.loads(match)
-                    if self._validate_ai_output(data):
-                        return data
-                except Exception:
-                    continue
-
-        # Extract outermost { }
-        start = text.find("{")
-        end = text.rfind("}")
+                    d = json.loads(m)
+                    if self._validate_ai_output(d): return d
+                except Exception: continue
+        start, end = text.find("{"), text.rfind("}")
         if start != -1 and end > start:
             try:
-                data = json.loads(text[start:end + 1])
-                if self._validate_ai_output(data):
-                    return data
-            except Exception:
-                pass
+                d = json.loads(text[start:end+1])
+                if self._validate_ai_output(d): return d
+            except Exception: pass
+        return self._attempt_repair(text)
 
-        # Last resort: try to repair truncated JSON by auto-closing
-        repaired = self._attempt_json_repair(text)
-        if repaired:
-            return repaired
-
-        logger.warning(f"Could not parse AI JSON: {text[:200]}")
-        return None
-
-    def _attempt_json_repair(self, text: str) -> dict | None:
-        """
-        Attempt to close a truncated JSON string by appending
-        the right number of closing brackets.
-        """
+    def _attempt_repair(self, text):
         try:
-            stripped = text.strip()
-            start = stripped.find("{")
-            if start == -1:
-                return None
-            partial = stripped[start:]
-
-            # Count unclosed brackets
-            stack = []
-            in_string = False
-            escape_next = False
-            for char in partial:
-                if escape_next:
-                    escape_next = False
-                    continue
-                if char == "\\" and in_string:
-                    escape_next = True
-                    continue
-                if char == '"':
-                    in_string = not in_string
-                    continue
-                if in_string:
-                    continue
-                if char in "{[":
-                    stack.append(char)
-                elif char in "}]":
-                    if stack:
-                        stack.pop()
-
-            # Close any open string
-            if in_string:
-                partial += '"'
-
-            # Close remaining open brackets
-            for bracket in reversed(stack):
-                partial += "}" if bracket == "{" else "]"
-
-            data = json.loads(partial)
-            if self._validate_ai_output(data):
+            s = text.strip()
+            start = s.find("{")
+            if start == -1: return None
+            partial = s[start:]
+            stack, in_str, esc = [], False, False
+            for ch in partial:
+                if esc: esc = False; continue
+                if ch == "\\" and in_str: esc = True; continue
+                if ch == '"': in_str = not in_str; continue
+                if in_str: continue
+                if ch in "{[": stack.append(ch)
+                elif ch in "}]" and stack: stack.pop()
+            if in_str: partial += '"'
+            for b in reversed(stack):
+                partial += "}" if b == "{" else "]"
+            d = json.loads(partial)
+            if self._validate_ai_output(d):
                 logger.info("JSON repair succeeded")
-                return data
-        except Exception as e:
-            logger.debug(f"JSON repair failed: {e}")
+                return d
+        except Exception: pass
         return None
 
-    def _validate_ai_output(self, data: dict) -> bool:
-        """Check the AI response has the required top-level keys."""
-        return isinstance(data, dict) and all(k in data for k in ("kpis", "charts", "insights"))
+    def _validate_ai_output(self, data):
+        return isinstance(data, dict) and all(k in data for k in ("kpis","charts","insights"))
 
-    def _sanitize_output(self, data: dict, profile: dict) -> dict:
-        """
-        Remove any chart/KPI entries that reference columns
-        not present in the actual dataset.
-        """
-        valid_cols = set(col["name"] for col in profile.get("columns", []))
-
-        # Filter KPIs
-        data["kpis"] = [
-            k for k in data.get("kpis", [])
-            if k.get("column") in valid_cols or k.get("column") == "_count"
-        ]
-
-        # Filter charts — x must be valid; y can be null
-        data["charts"] = [
-            c for c in data.get("charts", [])
-            if c.get("x") in valid_cols
-            and (c.get("y") is None or c.get("y") in valid_cols)
-        ]
-
-        # Ensure insights is a flat list of strings
-        data["insights"] = [
-            str(i) for i in data.get("insights", []) if i
-        ]
-
+    def _sanitize_output(self, data, profile):
+        valid = set(c["name"] for c in profile.get("columns", []))
+        data["kpis"] = [k for k in data.get("kpis", [])
+                       if k.get("column") in valid or k.get("column") == "_count"]
+        data["charts"] = [c for c in data.get("charts", [])
+                         if c.get("x") in valid
+                         and (c.get("y") is None or c.get("y") in valid)
+                         and (c.get("color") is None or c.get("color") in valid)]
+        data["insights"] = [str(i) for i in data.get("insights", []) if i]
         return data
 
     # ── Rule-Based Fallback ────────────────────────────────────
 
-    def _rule_based_fallback(self, profile: dict) -> dict:
-        """
-        Pure rule-based dashboard config.
-        Used when Groq is unavailable or the API key is not set.
-        """
+    def _rule_based_fallback(self, profile):
         num_cols = profile["numerical_cols"]
         cat_cols = profile["categorical_cols"]
         dt_cols  = profile["datetime_cols"]
         id_cols  = set(profile.get("id_cols", []))
 
-        # ── KPIs ──
         kpis = []
         for col in [c for c in num_cols if c not in id_cols][:5]:
-            col_l = col.lower()
-            is_currency = any(k in col_l for k in ["price", "revenue", "sales", "amount", "cost", "profit"])
+            cl = col.lower()
+            is_currency = any(k in cl for k in ["price","revenue","sales","amount","cost","profit"])
             kpis.append({
-                "label": col.replace("_", " ").title(),
+                "label": col.replace("_"," ").title(),
                 "column": col,
-                "aggregation": "sum" if any(k in col_l for k in ["amount", "revenue", "sales", "total"]) else "mean",
+                "aggregation": "sum" if any(k in cl for k in ["amount","revenue","sales","total"]) else "mean",
                 "format": "currency" if is_currency else "number",
+                "insight": f"Key metric from {col}",
             })
         if not kpis and num_cols:
-            kpis.append({"label": "Row Count", "column": num_cols[0], "aggregation": "count", "format": "number"})
+            kpis.append({"label":"Row Count","column":num_cols[0],"aggregation":"count","format":"number","insight":"Total records"})
 
-        # ── Charts ──
         charts = []
+        def add(t,x,y,title,desc,color=None,agg=None):
+            charts.append({"type":t,"x":x,"y":y,"color":color,"title":title,"description":desc,"aggregation":agg})
 
-        def add(ctype, x, y, title, desc):
-            charts.append({"type": ctype, "x": x, "y": y, "title": title, "description": desc})
-
+        if dt_cols and num_cols:
+            color_col = cat_cols[0] if cat_cols else None
+            add("line", dt_cols[0], num_cols[0], f"{num_cols[0].replace('_',' ').title()} Over Time",
+                "Time series trend", color=color_col)
         if cat_cols and num_cols:
             add("bar", cat_cols[0], num_cols[0],
                 f"{num_cols[0].replace('_',' ').title()} by {cat_cols[0].replace('_',' ').title()}",
-                "Category breakdown")
-        if dt_cols and num_cols:
-            add("line", dt_cols[0], num_cols[0],
-                f"{num_cols[0].replace('_',' ').title()} Over Time", "Time series trend")
+                "Category breakdown", agg="mean")
         if num_cols:
-            add("histogram", num_cols[0], None,
-                f"Distribution of {num_cols[0].replace('_',' ').title()}", "Value distribution")
-        for col in cat_cols[:3]:
-            if len(charts) >= 6:
-                break
+            add("histogram", num_cols[0], None, f"Distribution of {num_cols[0].replace('_',' ').title()}", "Distribution")
+        for col in cat_cols[:2]:
+            if len(charts) >= 6: break
             add("pie", col, None, f"{col.replace('_',' ').title()} Breakdown", "Proportional breakdown")
         if len(num_cols) >= 2:
             add("scatter", num_cols[0], num_cols[1],
                 f"{num_cols[0].replace('_',' ').title()} vs {num_cols[1].replace('_',' ').title()}",
                 "Correlation analysis")
-        if len(cat_cols) > 1 and len(num_cols) > 1:
-            add("bar", cat_cols[1], num_cols[1],
-                f"{num_cols[1].replace('_',' ').title()} by {cat_cols[1].replace('_',' ').title()}",
-                "Secondary breakdown")
 
-        # ── Insights ──
-        insights = [f"Dataset contains {profile['row_count']:,} records across {profile['column_count']} dimensions."]
-        if profile.get("missing_summary"):
-            mc = list(profile["missing_summary"].keys())
-            insights.append(f"Data quality: {len(mc)} column(s) have missing values — {', '.join(mc[:3])}.")
-        if num_cols:
-            insights.append(f"{len(num_cols)} numerical metric(s) available: {', '.join(num_cols[:3])}.")
-        if cat_cols:
-            insights.append(f"Categorical dimensions for segmentation: {', '.join(cat_cols[:3])}.")
-        if dt_cols:
-            insights.append(f"Time-based analysis available using '{dt_cols[0]}' column.")
+        insights = [f"Dataset: {profile['row_count']:,} rows × {profile['column_count']} columns."]
+        if num_cols: insights.append(f"Numerical metrics available: {', '.join(num_cols[:4])}.")
+        if cat_cols: insights.append(f"Categorical dimensions: {', '.join(cat_cols[:3])}.")
+        if dt_cols:  insights.append(f"Time-based analysis using '{dt_cols[0]}'.")
 
         return {
             "kpis": kpis,

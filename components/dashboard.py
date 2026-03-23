@@ -40,7 +40,7 @@ class DashboardRenderer:
 ">📌 {insight}</div>
 """, unsafe_allow_html=True)
             else:
-                st.info("No AI insights available. Check your HuggingFace API token.")
+                st.info("No AI insights available. Check your Groq API key in the sidebar.")
 
         with col2:
             st.markdown("#### 🚨 Anomalies Detected")

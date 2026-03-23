@@ -6,21 +6,21 @@ Statistical anomaly detection using Z-score and IQR methods
 import logging
 import numpy as np
 import pandas as pd
-import streamlit as st
 from utils.config import AppConfig
 
 logger = logging.getLogger("ai_dashboard.anomaly_detector")
 
 
 class AnomalyDetector:
-    """Detects statistical anomalies in numerical columns."""
+    """Detects statistical anomalies in numerical columns.
 
-    @st.cache_data(show_spinner=False)
-    def detect(_self, df: pd.DataFrame, profile: dict) -> dict:
+    Issue #6: NOT decorated with @st.cache_data. app.py caches in st.session_state.
+    """
+
+    def detect(self, df: pd.DataFrame, profile: dict) -> dict:
         """
         Detect anomalies using Z-score and IQR methods.
-        
-        Returns dict keyed by column name, with anomaly info.
+        Returns dict keyed by column name with anomaly info.
         """
         num_cols = [
             c for c in profile.get("numerical_cols", [])
@@ -32,9 +32,8 @@ class AnomalyDetector:
             series = df[col].dropna()
             if len(series) < 10:
                 continue
-
             try:
-                anomaly_info = _self._detect_column(series, col)
+                anomaly_info = self._detect_column(series, col)
                 if anomaly_info["n_anomalies"] > 0:
                     results[col] = anomaly_info
             except Exception as e:

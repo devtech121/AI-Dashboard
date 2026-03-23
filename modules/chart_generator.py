@@ -1,6 +1,11 @@
 """
 Chart Generator Module
-Generates Plotly charts based on data profile and AI suggestions
+Generates Plotly charts based on data profile and AI/verifier suggestions.
+
+Issue #6 fix: @st.cache_data removed — caller caches in st.session_state.
+The rigid _enforce_chart_rules() override has been removed. The AnalysisVerifier
+already corrects chart types before this module runs, so we trust the input.
+Only minimal safety checks remain (column existence, None y-axis).
 """
 
 import logging
@@ -8,16 +13,13 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import streamlit as st
 from utils.config import AppConfig
 
 logger = logging.getLogger("ai_dashboard.chart_generator")
 
-# Explicit chart heights — critical for Streamlit column rendering
 CHART_HEIGHT = 420
 CHART_HEIGHT_WIDE = 460
 
-# Shared Plotly layout defaults
 LAYOUT_DEFAULTS = dict(
     template=AppConfig.CHART_TEMPLATE,
     font_family=AppConfig.CHART_FONT_FAMILY,
@@ -50,38 +52,38 @@ LAYOUT_DEFAULTS = dict(
 
 
 class ChartGenerator:
-    """Generates Plotly chart figures from AI suggestions + rules."""
+    """
+    Generates Plotly chart figures from verified AI suggestions.
+    No @st.cache_data — caller stores result in st.session_state (Issue #6).
+    """
 
-    @st.cache_data(show_spinner=False)
-    def generate(_self, df: pd.DataFrame, profile: dict, ai_analysis: dict) -> list:
+    def generate(self, df: pd.DataFrame, profile: dict, ai_analysis: dict) -> list:
         """
-        Generate Plotly figures.
-        
-        Returns list of chart dicts:
-          title, description, figure
+        Build Plotly figures for each chart suggestion in ai_analysis.
+        Now supports the 'color' field for multi-entity line/bar charts
+        (e.g. stock prices by ticker on a single chart).
         """
         ai_charts = ai_analysis.get("charts", [])
         valid_cols = set(df.columns)
         generated = []
 
-        # Process AI-suggested charts
         for chart_def in ai_charts:
             if len(generated) >= AppConfig.MAX_CHARTS:
                 break
 
-            x_col = chart_def.get("x")
-            y_col = chart_def.get("y")
+            x_col  = chart_def.get("x")
+            y_col  = chart_def.get("y")
+            color_col = chart_def.get("color")
             chart_type = chart_def.get("type", "bar")
 
             if x_col and x_col not in valid_cols:
                 continue
             if y_col and y_col not in valid_cols:
                 continue
+            if color_col and color_col not in valid_cols:
+                color_col = None  # gracefully ignore bad color col
 
-            # Override chart type using rules
-            chart_type = _self._enforce_chart_rules(df, chart_type, x_col, y_col, profile)
-
-            fig = _self._build_figure(df, chart_type, x_col, y_col, chart_def)
+            fig = self._build_figure(df, chart_type, x_col, y_col, chart_def, color_col=color_col)
             if fig is not None:
                 generated.append({
                     "title": chart_def.get("title", f"{x_col} chart"),
@@ -90,96 +92,121 @@ class ChartGenerator:
                     "type": chart_type,
                 })
 
-        # Fill with rule-based charts if needed
         if len(generated) < AppConfig.MIN_CHARTS:
-            rule_charts = _self._rule_based_charts(df, profile, existing=generated)
+            rule_charts = self._rule_based_charts(df, profile, existing=generated)
             generated.extend(rule_charts[:AppConfig.MAX_CHARTS - len(generated)])
 
-        # Add correlation heatmap if enough numerical columns
         if len(generated) < AppConfig.MAX_CHARTS and len(profile.get("numerical_cols", [])) >= 3:
-            heatmap = _self._build_correlation_heatmap(df, profile)
+            heatmap = self._build_correlation_heatmap(df, profile)
             if heatmap:
                 generated.append(heatmap)
+
+        if len(generated) < AppConfig.MAX_CHARTS:
+            semantic = self._suggest_semantic_charts(df, profile, existing=generated)
+            if semantic:
+                remaining = AppConfig.MAX_CHARTS - len(generated)
+                generated.extend(semantic[:remaining])
 
         logger.info(f"Generated {len(generated)} charts")
         return generated[:AppConfig.MAX_CHARTS]
 
     # ── Figure Builders ────────────────────────────────────────
 
-    def _build_figure(self, df, chart_type, x_col, y_col, chart_def):
-        """Dispatch to the appropriate chart builder."""
+    def _build_figure(self, df, chart_type, x_col, y_col, chart_def, color_col=None):
+        """Dispatch to appropriate chart builder."""
         try:
             builders = {
-                "bar": self._build_bar,
-                "line": self._build_line,
-                "pie": self._build_pie,
-                "scatter": self._build_scatter,
+                "bar":       self._build_bar,
+                "line":      self._build_line,
+                "pie":       self._build_pie,
+                "scatter":   self._build_scatter,
                 "histogram": self._build_histogram,
             }
             builder = builders.get(chart_type, self._build_bar)
-            return builder(df, x_col, y_col, chart_def)
+            return builder(df, x_col, y_col, chart_def, color_col=color_col)
         except Exception as e:
-            logger.warning(f"Failed to build {chart_type} chart for {x_col}/{y_col}: {e}")
+            logger.warning(f"Failed {chart_type} for {x_col}/{y_col}: {e}")
             return None
 
-    def _build_bar(self, df, x_col, y_col, chart_def):
+    def _build_bar(self, df, x_col, y_col, chart_def, color_col=None):
         title = chart_def.get("title", f"{y_col} by {x_col}")
+        agg_hint = chart_def.get("aggregation", None)
 
         if y_col and y_col in df.columns:
-            agg_df = (
-                df.groupby(x_col)[y_col]
-                .sum()
-                .reset_index()
-                .sort_values(y_col, ascending=False)
-                .head(20)
-            )
-            fig = px.bar(
-                agg_df, x=x_col, y=y_col,
-                title=title,
-                color_discrete_sequence=AppConfig.CHART_COLOR_SEQUENCE,
-                labels={
-                    x_col: x_col.replace("_", " ").title(),
-                    y_col: y_col.replace("_", " ").title()
-                }
-            )
+            y_series = df[y_col].dropna()
+            y_min, y_max = y_series.min(), y_series.max()
+            is_binary_y = set(y_series.unique()).issubset({0, 1, 0.0, 1.0})
+
+            if is_binary_y:
+                agg_df = df.groupby(x_col)[y_col].agg(
+                    count="sum", rate=lambda s: round(s.mean() * 100, 1)
+                ).reset_index().sort_values("count", ascending=False).head(20)
+                fig = px.bar(
+                    agg_df, x=x_col, y="count",
+                    title=f"{y_col.replace('_',' ').title()} Count by {x_col.replace('_',' ').title()}",
+                    text="rate",
+                    color_discrete_sequence=AppConfig.CHART_COLOR_SEQUENCE,
+                    labels={x_col: x_col.replace("_"," ").title(), "count": f"Count of {y_col}"}
+                )
+                fig.update_traces(texttemplate="%{text}%", textposition="outside")
+            elif agg_hint == "sum" or (y_max - y_min > 1000 and agg_hint != "mean"):
+                agg_df = (df.groupby(x_col)[y_col].sum().reset_index()
+                         .sort_values(y_col, ascending=False).head(20))
+                fig = px.bar(agg_df, x=x_col, y=y_col, title=title,
+                            color_discrete_sequence=AppConfig.CHART_COLOR_SEQUENCE,
+                            labels={x_col: x_col.replace("_"," ").title(), y_col: y_col.replace("_"," ").title()})
+            else:
+                agg_df = (df.groupby(x_col)[y_col].mean().round(2).reset_index()
+                         .sort_values(y_col, ascending=False).head(20))
+                fig = px.bar(agg_df, x=x_col, y=y_col,
+                            title=f"Avg {y_col.replace('_',' ').title()} by {x_col.replace('_',' ').title()}",
+                            color_discrete_sequence=AppConfig.CHART_COLOR_SEQUENCE,
+                            labels={x_col: x_col.replace("_"," ").title(), y_col: f"Avg {y_col.replace('_',' ').title()}"})
         else:
             vc = df[x_col].value_counts().head(15).reset_index()
             vc.columns = [x_col, "count"]
-            fig = px.bar(
-                vc, x=x_col, y="count", title=title,
-                color_discrete_sequence=AppConfig.CHART_COLOR_SEQUENCE,
-            )
+            fig = px.bar(vc, x=x_col, y="count", title=title,
+                        color_discrete_sequence=AppConfig.CHART_COLOR_SEQUENCE)
 
         fig.update_layout(**LAYOUT_DEFAULTS)
-        fig.update_traces(marker_line_width=0, marker_color="#6366f1")
+        fig.update_traces(marker_line_width=0, selector=dict(type="bar"))
         return fig
 
-    def _build_line(self, df, x_col, y_col, chart_def):
+    def _build_line(self, df, x_col, y_col, chart_def, color_col=None):
         title = chart_def.get("title", f"{y_col} over {x_col}")
 
-        plot_df = df[[x_col, y_col]].dropna().copy() if y_col else df[[x_col]].dropna().copy()
+        plot_df = df[[x_col, y_col] + ([color_col] if color_col else [])].dropna().copy() if y_col else df[[x_col]].dropna().copy()
+
         try:
             plot_df[x_col] = pd.to_datetime(plot_df[x_col])
             plot_df = plot_df.sort_values(x_col)
-            if y_col:
+            # Only aggregate if no color grouping (single series)
+            if y_col and not color_col:
                 plot_df = plot_df.groupby(x_col)[y_col].mean().reset_index()
         except Exception:
             plot_df = plot_df.sort_values(x_col)
 
         if y_col:
-            fig = px.line(
-                plot_df, x=x_col, y=y_col, title=title,
-                labels={
-                    x_col: x_col.replace("_", " ").title(),
-                    y_col: y_col.replace("_", " ").title()
-                }
-            )
-            fig.update_traces(
-                line_color="#6366f1",
-                line_width=2.5,
-                fill="tozeroy",
-                fillcolor="rgba(99,102,241,0.08)"
-            )
+            if color_col:
+                # Multi-entity line chart (e.g. all stock tickers on one chart)
+                fig = px.line(
+                    plot_df, x=x_col, y=y_col, color=color_col,
+                    title=title,
+                    color_discrete_sequence=AppConfig.CHART_COLOR_SEQUENCE,
+                    labels={
+                        x_col: x_col.replace("_"," ").title(),
+                        y_col: y_col.replace("_"," ").title(),
+                        color_col: color_col.replace("_"," ").title(),
+                    }
+                )
+                fig.update_traces(line_width=1.8)
+            else:
+                fig = px.line(
+                    plot_df, x=x_col, y=y_col, title=title,
+                    labels={x_col: x_col.replace("_"," ").title(), y_col: y_col.replace("_"," ").title()}
+                )
+                fig.update_traces(line_color="#6366f1", line_width=2.5,
+                                  fill="tozeroy", fillcolor="rgba(99,102,241,0.08)")
         else:
             vc = plot_df[x_col].value_counts().sort_index().reset_index()
             vc.columns = [x_col, "count"]
@@ -189,7 +216,7 @@ class ChartGenerator:
         fig.update_layout(**LAYOUT_DEFAULTS)
         return fig
 
-    def _build_pie(self, df, x_col, y_col, chart_def):
+    def _build_pie(self, df, x_col, y_col, chart_def, color_col=None):
         title = chart_def.get("title", f"{x_col} Distribution")
         vc = df[x_col].value_counts().head(8)  # limit to 8 slices max
 
@@ -214,47 +241,53 @@ class ChartGenerator:
         fig.update_layout(**pie_layout, showlegend=True)
         return fig
 
-    def _build_scatter(self, df, x_col, y_col, chart_def):
+    def _build_scatter(self, df, x_col, y_col, chart_def, color_col=None):
         title = chart_def.get("title", f"{x_col} vs {y_col}")
         if not y_col:
             return None
 
-        plot_df = df[[x_col, y_col]].dropna()
-        if len(plot_df) > 2000:
-            plot_df = plot_df.sample(2000, random_state=42)
+        cols_needed = [x_col, y_col] + ([color_col] if color_col else [])
+        plot_df = df[cols_needed].dropna()
+        if len(plot_df) > 3000:
+            plot_df = plot_df.sample(3000, random_state=42)
+
+        labels = {
+            x_col: x_col.replace("_"," ").title(),
+            y_col: y_col.replace("_"," ").title(),
+        }
+        if color_col:
+            labels[color_col] = color_col.replace("_"," ").title()
 
         fig = px.scatter(
             plot_df, x=x_col, y=y_col,
+            color=color_col,
             title=title,
             opacity=0.65,
-            labels={
-                x_col: x_col.replace("_", " ").title(),
-                y_col: y_col.replace("_", " ").title()
-            },
-            color_discrete_sequence=["#6366f1"],
+            labels=labels,
+            color_discrete_sequence=AppConfig.CHART_COLOR_SEQUENCE,
         )
 
-        # Add manual trendline using numpy (no statsmodels needed)
-        try:
-            import numpy as np
-            z = np.polyfit(plot_df[x_col], plot_df[y_col], 1)
-            p = np.poly1d(z)
-            x_line = np.linspace(plot_df[x_col].min(), plot_df[x_col].max(), 100)
-            fig.add_scatter(
-                x=x_line, y=p(x_line),
-                mode="lines",
-                line=dict(color="#ef4444", width=2, dash="dash"),
-                name="Trend",
-                showlegend=True,
-            )
-        except Exception:
-            pass
+        # Add trendline only for single-series (no color grouping)
+        if not color_col:
+            try:
+                z = np.polyfit(plot_df[x_col], plot_df[y_col], 1)
+                p = np.poly1d(z)
+                x_line = np.linspace(plot_df[x_col].min(), plot_df[x_col].max(), 100)
+                fig.add_scatter(
+                    x=x_line, y=p(x_line), mode="lines",
+                    line=dict(color="#ef4444", width=2, dash="dash"),
+                    name="Trend", showlegend=True,
+                )
+            except Exception:
+                pass
+        else:
+            fig.update_traces(marker_size=5)
 
         fig.update_traces(marker_size=6, selector=dict(mode="markers"))
         fig.update_layout(**LAYOUT_DEFAULTS)
         return fig
 
-    def _build_histogram(self, df, x_col, y_col, chart_def):
+    def _build_histogram(self, df, x_col, y_col, chart_def, color_col=None):
         title = chart_def.get("title", f"Distribution of {x_col}")
         series = df[x_col].dropna()
 
@@ -278,6 +311,80 @@ class ChartGenerator:
 
         if len(num_cols) < 2:
             return None
+
+    def _suggest_semantic_charts(self, df, profile, existing):
+        """Suggest extra charts from correlations and seasonality."""
+        charts = []
+        existing_keys = {
+            (c.get("type"), c.get("x"), c.get("y"), c.get("color"))
+            for c in existing if isinstance(c, dict)
+        }
+
+        num_cols = profile.get("numerical_cols", [])
+        dt_cols = profile.get("datetime_cols", [])
+
+        # Correlation-based scatter charts
+        corr = profile.get("correlation_matrix") or {}
+        pairs = []
+        for c1 in num_cols[:10]:
+            for c2 in num_cols[:10]:
+                if c1 >= c2:
+                    continue
+                try:
+                    r = (corr.get(c1) or {}).get(c2, 0) or 0
+                    pairs.append((abs(r), r, c1, c2))
+                except Exception:
+                    continue
+        pairs.sort(reverse=True, key=lambda x: x[0])
+        for _, r, c1, c2 in pairs[:3]:
+            key = ("scatter", c1, c2, None)
+            if key in existing_keys:
+                continue
+            chart_def = {
+                "type": "scatter",
+                "x": c1,
+                "y": c2,
+                "title": f"Correlation: {c1.replace('_',' ').title()} vs {c2.replace('_',' ').title()}",
+                "description": f"Correlation coefficient r={r:.2f}",
+            }
+            fig = self._build_scatter(df, c1, c2, chart_def, color_col=None)
+            if fig:
+                charts.append({
+                    "title": chart_def["title"],
+                    "description": chart_def["description"],
+                    "figure": fig,
+                    "type": "scatter",
+                })
+                existing_keys.add(key)
+
+        # Seasonality: month trend for first datetime + first numeric
+        if dt_cols and num_cols:
+            x_col = dt_cols[0]
+            y_col = num_cols[0]
+            key = ("line", "month", y_col, None)
+            if key not in existing_keys:
+                try:
+                    plot_df = df[[x_col, y_col]].dropna().copy()
+                    plot_df[x_col] = pd.to_datetime(plot_df[x_col])
+                    plot_df["month"] = plot_df[x_col].dt.to_period("M").astype(str)
+                    agg_df = plot_df.groupby("month")[y_col].mean().reset_index()
+                    fig = px.line(
+                        agg_df, x="month", y=y_col,
+                        title=f"Seasonality: Avg {y_col.replace('_',' ').title()} by Month",
+                        labels={"month": "Month", y_col: f"Avg {y_col.replace('_',' ').title()}"},
+                        color_discrete_sequence=AppConfig.CHART_COLOR_SEQUENCE,
+                    )
+                    fig.update_layout(**LAYOUT_DEFAULTS)
+                    charts.append({
+                        "title": f"Seasonality: Avg {y_col.replace('_',' ').title()} by Month",
+                        "description": "Monthly seasonality trend",
+                        "figure": fig,
+                        "type": "line",
+                    })
+                except Exception:
+                    pass
+
+        return charts
 
         try:
             corr = df[num_cols].corr()
@@ -313,91 +420,53 @@ class ChartGenerator:
             logger.warning(f"Correlation heatmap failed: {e}")
             return None
 
-    # ── Rule Enforcement ───────────────────────────────────────
-
-    def _enforce_chart_rules(self, df, chart_type, x_col, y_col, profile):
-        """Override AI chart type using data-type rules."""
-        if not x_col or x_col not in df.columns:
-            return chart_type
-
-        x_type = self._get_col_type(x_col, profile)
-        y_type = self._get_col_type(y_col, profile) if y_col else None
-
-        # Rule: datetime + numerical → line
-        if x_type == "datetime" and y_type == "numerical":
-            return "line"
-
-        # Rule: numerical only → histogram
-        if x_type == "numerical" and y_col is None:
-            return "histogram"
-
-        # Rule: categorical + numerical → bar
-        if x_type == "categorical" and y_type == "numerical":
-            return "bar"
-
-        # Rule: 2 numerical → scatter
-        if x_type == "numerical" and y_type == "numerical":
-            return "scatter"
-
-        # Rule: categorical only → pie (if few values) or bar
-        if x_type == "categorical" and not y_col:
-            n_unique = df[x_col].nunique()
-            return "pie" if n_unique <= 8 else "bar"
-
-        return chart_type
-
-    def _get_col_type(self, col, profile):
-        """Get column type from profile."""
-        for col_meta in profile.get("columns", []):
-            if col_meta["name"] == col:
-                return col_meta["type"]
-        return None
-
     def _rule_based_charts(self, df, profile, existing):
-        """Generate additional rule-based charts to meet minimum count."""
+        """Generate rule-based charts to fill gaps. Uses color for multi-entity series."""
         num_cols = [c for c in profile.get("numerical_cols", []) if c not in profile.get("id_cols", [])]
         cat_cols = profile.get("categorical_cols", [])
-        dt_cols = profile.get("datetime_cols", [])
-        charts = []
-
+        dt_cols  = profile.get("datetime_cols", [])
+        charts   = []
         existing_titles = {c["title"] for c in existing}
 
-        def add_chart(chart_type, x_col, y_col, title, desc):
+        def add(ctype, x, y, title, desc, color=None):
             if title in existing_titles:
                 return
-            fig = self._build_figure(df, chart_type, x_col, y_col, {"title": title})
+            fig = self._build_figure(df, ctype, x, y, {"title": title, "aggregation": None}, color_col=color)
             if fig:
-                charts.append({"title": title, "description": desc, "figure": fig, "type": chart_type})
+                charts.append({"title": title, "description": desc, "figure": fig, "type": ctype})
                 existing_titles.add(title)
 
-        if cat_cols and num_cols:
-            add_chart("bar", cat_cols[0], num_cols[0],
-                      f"{num_cols[0].replace('_',' ').title()} by {cat_cols[0].replace('_',' ').title()}",
-                      "Category breakdown")
-
+        # Time series — use color grouping if a sensible categorical column exists
         if dt_cols and num_cols:
-            add_chart("line", dt_cols[0], num_cols[0],
-                      f"{num_cols[0].replace('_',' ').title()} Over Time",
-                      "Time series")
+            color_col = None
+            for c in cat_cols:
+                n_unique = df[c].nunique() if c in df.columns else 999
+                if 2 <= n_unique <= 15:
+                    color_col = c
+                    break
+            add("line", dt_cols[0], num_cols[0],
+                f"{num_cols[0].replace('_',' ').title()} Over Time",
+                "Time series trend", color=color_col)
+
+        if cat_cols and num_cols:
+            add("bar", cat_cols[0], num_cols[0],
+                f"{num_cols[0].replace('_',' ').title()} by {cat_cols[0].replace('_',' ').title()}",
+                "Category breakdown")
 
         for col in num_cols[:2]:
-            add_chart("histogram", col, None,
-                      f"Distribution of {col.replace('_',' ').title()}",
-                      "Value distribution")
+            add("histogram", col, None, f"Distribution of {col.replace('_',' ').title()}", "Distribution")
 
         for col in cat_cols[:2]:
-            add_chart("pie", col, None,
-                      f"{col.replace('_',' ').title()} Composition",
-                      "Proportional breakdown")
+            add("pie", col, None, f"{col.replace('_',' ').title()} Composition", "Proportional breakdown")
 
         if len(num_cols) >= 2:
-            add_chart("scatter", num_cols[0], num_cols[1],
-                      f"{num_cols[0].replace('_',' ').title()} vs {num_cols[1].replace('_',' ').title()}",
-                      "Correlation")
+            add("scatter", num_cols[0], num_cols[1],
+                f"{num_cols[0].replace('_',' ').title()} vs {num_cols[1].replace('_',' ').title()}",
+                "Correlation")
 
         if len(cat_cols) >= 2 and num_cols:
-            add_chart("bar", cat_cols[1], num_cols[0],
-                      f"{num_cols[0].replace('_',' ').title()} by {cat_cols[1].replace('_',' ').title()}",
-                      "Secondary breakdown")
+            add("bar", cat_cols[1], num_cols[0],
+                f"{num_cols[0].replace('_',' ').title()} by {cat_cols[1].replace('_',' ').title()}",
+                "Secondary breakdown")
 
         return charts
