@@ -62,10 +62,6 @@ class AIEngine:
         # NOTE: do NOT cache the key here — always read it fresh
         # via self._get_api_key() so sidebar/secrets changes take effect
 
-    def _get_api_key(self) -> str:
-        """Always resolve the key fresh — never cached on self."""
-        return AppConfig.get_groq_key()
-
     def _get_api_key(self, provider: str) -> str:
         if provider == "anthropic":
             return AppConfig.get_claude_key()
@@ -112,14 +108,16 @@ class AIEngine:
         starting_model: str = None,
     ) -> str | None:
         """Try each model in fallback order until one succeeds."""
-        if not self.api_key:
-            logger.warning("No Groq API key — skipping AI call")
-            return None
-
         models_to_try = self._get_fallback_order(starting_model or self.model)
         for model_id in models_to_try:
+            model_cfg = AppConfig.MODELS.get(model_id, {})
+            provider = model_cfg.get("provider", "groq")
+            api_key = self._get_api_key(provider)
+            if not api_key:
+                logger.warning(f"No API key for provider: {provider}")
+                continue
             try:
-                result = self._call_model(model_id, prompt, max_tokens, temperature)
+                result = self._call_model(provider, model_id, prompt, max_tokens, temperature, api_key)
                 if result:
                     logger.info(f"Response from: {model_id}")
                     return result
@@ -133,15 +131,34 @@ class AIEngine:
             return self._fallback_order[idx:] + self._fallback_order[:idx]
         return self._fallback_order
 
-    def _call_model(
-        self,
-        model_id: str,
-        prompt: str,
-        max_tokens: int,
-        temperature: float,
-    ) -> str | None:
-        """Make a single Groq chat completion call."""
-        client = _get_groq_client(self.api_key)
+    def _call_model(self, provider, model_id, prompt, max_tokens, temperature, api_key):
+        system_msg = (
+            "You are a senior data analyst and visualization expert. "
+            "You produce ONLY valid, complete JSON with no markdown or explanation. "
+            "Your chart and KPI suggestions are always specific, data-driven, and actionable. "
+            "Every opening bracket has a matching closing bracket."
+        )
+
+        if provider == "anthropic":
+            client = _get_anthropic_client(api_key)
+            response = client.messages.create(
+                model=model_id,
+                system=system_msg,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            text = ""
+            try:
+                if isinstance(response.content, list):
+                    text = "".join([c.text for c in response.content if hasattr(c, "text")])
+                elif isinstance(response.content, str):
+                    text = response.content
+            except Exception:
+                text = None
+            return text.strip() if text else None
+
+        client = _get_groq_client(api_key)
         response = client.chat.completions.create(
             model=model_id,
             messages=[
