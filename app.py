@@ -56,7 +56,7 @@ def initialize_session_state():
         "file_processed": False,
         "processing_error": None,
         "selected_model": AppConfig.DEFAULT_MODEL,
-        "sample_data_consent": False,   # Issue #7: opt-in for sending rows to LLM
+        "sample_data_consent": False,
         "ai_analysis_cache": {},
         "custom_charts": [],
     }
@@ -146,7 +146,7 @@ def render_sidebar(df: pd.DataFrame = None):
         else:
             st.warning("No Claude key set", icon="🔑")
 
-        # Issue #7: Explicit opt-in before sending any raw data rows to LLM
+        # User consent gate for sending sample rows to the LLM
         st.markdown("---")
         st.markdown("### 🔒 Data Privacy")
         consent = st.checkbox(
@@ -218,7 +218,7 @@ def render_filters(df: pd.DataFrame):
             if selected_vals:
                 filters_applied[col] = selected_vals
 
-    # Numeric range filters (first 2) — Issue #4: guard against all-NaN columns
+    # Numeric range filters (first 2) with guardrails for empty/NaN columns
     for col in numeric_cols[:2]:
         series = df[col].dropna()
         if len(series) == 0:
@@ -319,9 +319,8 @@ def process_uploaded_file(uploaded_file):
     """
     Process uploaded CSV file and run full AI pipeline.
 
-    Issue #6: Results are stored in st.session_state (per-session scope).
-    We no longer rely on @st.cache_data on profiler/anomaly/ai_engine, which
-    caches globally and can leak one user's data to another in shared deployments.
+    Results are stored in st.session_state (per-session scope) to avoid
+    cross-user data leakage in shared deployments.
     """
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -348,8 +347,8 @@ def process_uploaded_file(uploaded_file):
         anomalies = detector.detect(df, profile)
         st.session_state.anomalies = anomalies
 
-        # Step 4: AI analysis (no cache — Issue #6)
-        # Issue #7: only include sample rows if user explicitly opted in
+        # Step 4: AI analysis (session-scoped cache)
+        # Only include sample rows if user explicitly opts in
         status_text.text("🤖 Running AI analysis (this may take a moment)...")
         progress_bar.progress(52)
         include_samples = st.session_state.get("sample_data_consent", False)
@@ -615,7 +614,7 @@ def render_dashboard():
 
 def render_chat_section(df: pd.DataFrame):
     """Render the chat interface for data Q&A."""
-    # Issue #2 fix: pass the user's selected model to ChatEngine
+    # Use the user's selected model for chat
     chat_engine = ChatEngine(model=st.session_state.get("selected_model", AppConfig.DEFAULT_MODEL))
 
     # Display chat history
@@ -833,3 +832,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

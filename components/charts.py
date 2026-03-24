@@ -28,21 +28,21 @@ class ChartRenderer:
             return
 
         # First chart — full width, taller
-        self._render_card(charts[0], wide=True)
+        self._render_card(charts[0], wide=True, index=0)
 
         # Remaining in 2-column grid
         remaining = charts[1:]
         for i in range(0, len(remaining), 2):
             left, right = st.columns(2, gap="medium")
             with left:
-                self._render_card(remaining[i], wide=False)
+                self._render_card(remaining[i], wide=False, index=i + 1)
             if i + 1 < len(remaining):
                 with right:
-                    self._render_card(remaining[i + 1], wide=False)
+                    self._render_card(remaining[i + 1], wide=False, index=i + 2)
 
     # ── Private ────────────────────────────────────────────────
 
-    def _render_card(self, chart: dict, wide: bool = False):
+    def _render_card(self, chart: dict, wide: bool = False, index: int = 0):
         """Wrap a chart in a styled card and render it."""
         fig = chart.get("figure")
         if fig is None:
@@ -51,6 +51,8 @@ class ChartRenderer:
         title = chart.get("title", "")
         description = chart.get("description", "")
         chart_type = chart.get("type", "")
+        safe_title = "".join(ch if ch.isalnum() else "_" for ch in title)[:30]
+        chart_key = f"plotly_{chart_type}_{safe_title}_{index}"
 
         # Card header
         type_icon = {
@@ -85,4 +87,5 @@ class ChartRenderer:
             fig,
             use_container_width=True,
             config=PLOTLY_CONFIG,
+            key=chart_key,
         )

@@ -2,7 +2,7 @@
 Chart Generator Module
 Generates Plotly charts based on data profile and AI/verifier suggestions.
 
-Issue #6 fix: @st.cache_data removed — caller caches in st.session_state.
+Caching is handled by the caller (stored in session state).
 The rigid _enforce_chart_rules() override has been removed. The AnalysisVerifier
 already corrects chart types before this module runs, so we trust the input.
 Only minimal safety checks remain (column existence, None y-axis).
@@ -54,7 +54,7 @@ LAYOUT_DEFAULTS = dict(
 class ChartGenerator:
     """
     Generates Plotly chart figures from verified AI suggestions.
-    No @st.cache_data — caller stores result in st.session_state (Issue #6).
+    No @st.cache_data; caller stores result in session state.
     """
 
     def generate(self, df: pd.DataFrame, profile: dict, ai_analysis: dict) -> list:
@@ -311,6 +311,39 @@ class ChartGenerator:
 
         if len(num_cols) < 2:
             return None
+        try:
+            corr = df[num_cols].corr()
+            labels = [c.replace("_", " ").title() for c in corr.columns]
+
+            fig = go.Figure(data=go.Heatmap(
+                z=corr.values,
+                x=labels,
+                y=labels,
+                colorscale=[[0, "#ef4444"], [0.5, "#1a1a2e"], [1, "#6366f1"]],
+                zmid=0,
+                zmin=-1, zmax=1,
+                text=corr.round(2).values,
+                texttemplate="%{text}",
+                textfont_size=10,
+                hoverongaps=False,
+            ))
+            heatmap_layout = {k: v for k, v in LAYOUT_DEFAULTS.items() if k not in ("xaxis", "yaxis")}
+            fig.update_layout(
+                **heatmap_layout,
+                title="Correlation Matrix",
+                height=CHART_HEIGHT,
+                xaxis=dict(tickfont=dict(size=10, color="#8888aa"), side="bottom"),
+                yaxis=dict(tickfont=dict(size=10, color="#8888aa"), autorange="reversed"),
+            )
+            return {
+                "title": "Correlation Matrix",
+                "description": "Pairwise correlation between numerical columns",
+                "figure": fig,
+                "type": "heatmap"
+            }
+        except Exception as e:
+            logger.warning(f"Correlation heatmap failed: {e}")
+            return None
 
     def _suggest_semantic_charts(self, df, profile, existing):
         """Suggest extra charts from correlations and seasonality."""
@@ -386,40 +419,6 @@ class ChartGenerator:
 
         return charts
 
-        try:
-            corr = df[num_cols].corr()
-            labels = [c.replace("_", " ").title() for c in corr.columns]
-
-            fig = go.Figure(data=go.Heatmap(
-                z=corr.values,
-                x=labels,
-                y=labels,
-                colorscale=[[0, "#ef4444"], [0.5, "#1a1a2e"], [1, "#6366f1"]],
-                zmid=0,
-                zmin=-1, zmax=1,
-                text=corr.round(2).values,
-                texttemplate="%{text}",
-                textfont_size=10,
-                hoverongaps=False,
-            ))
-            heatmap_layout = {k: v for k, v in LAYOUT_DEFAULTS.items() if k not in ("xaxis", "yaxis")}
-            fig.update_layout(
-                **heatmap_layout,
-                title="Correlation Matrix",
-                height=CHART_HEIGHT,
-                xaxis=dict(tickfont=dict(size=10, color="#8888aa"), side="bottom"),
-                yaxis=dict(tickfont=dict(size=10, color="#8888aa"), autorange="reversed"),
-            )
-            return {
-                "title": "Correlation Matrix",
-                "description": "Pairwise correlation between numerical columns",
-                "figure": fig,
-                "type": "heatmap"
-            }
-        except Exception as e:
-            logger.warning(f"Correlation heatmap failed: {e}")
-            return None
-
     def _rule_based_charts(self, df, profile, existing):
         """Generate rule-based charts to fill gaps. Uses color for multi-entity series."""
         num_cols = [c for c in profile.get("numerical_cols", []) if c not in profile.get("id_cols", [])]
@@ -470,3 +469,4 @@ class ChartGenerator:
                 "Secondary breakdown")
 
         return charts
+

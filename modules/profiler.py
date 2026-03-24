@@ -26,8 +26,7 @@ BINARY_PAIRS = [
 class DataProfiler:
     """Profiles a DataFrame, detecting column types and computing statistics.
 
-    Issue #6: NOT decorated with @st.cache_data to avoid cross-user data leakage
-    in shared deployments. app.py caches the result in st.session_state instead.
+    Not decorated with @st.cache_data to avoid cross-user leakage; the caller stores results per session.
     """
 
     def profile(self, df: pd.DataFrame) -> dict:

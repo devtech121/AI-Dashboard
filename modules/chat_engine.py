@@ -2,19 +2,12 @@
 Chat Engine Module
 AST-validated sandboxed pandas execution for chat Q&A.
 
-Security fixes in this version:
-  - ALLOWED_ROOT_NAMES is now ENFORCED: every top-level Name in the AST
-    must be in the explicit allowlist, blocking pd.read_csv, pd.to_csv,
-    and any other filesystem I/O through pandas (Issue #1 follow-up).
-  - Execution runs inside a threading.Timer hard-kill (Issue #2 follow-up):
-    code that would block (heavy apply, infinite groupby, etc.) is aborted
-    after EXEC_TIMEOUT_SECONDS regardless.
-  - Dangerous pandas method names are blocked at the AST attribute level.
+Security: strict AST allowlist, blocked I/O methods, and a hard timeout via a separate process.
 """
 
 import ast
 import logging
-import threading
+import multiprocessing as mp
 import pandas as pd
 import numpy as np
 from utils.config import AppConfig
@@ -24,7 +17,7 @@ logger = logging.getLogger("ai_dashboard.chat_engine")
 # Hard timeout for sandbox execution (seconds)
 EXEC_TIMEOUT_SECONDS = 8
 
-# ── AST Whitelist ──────────────────────────────────────────────
+# -- AST Whitelist ------------------------------------------------------------
 ALLOWED_AST_NODES = {
     ast.Assign, ast.AugAssign, ast.Expr, ast.Return,
     ast.BoolOp, ast.BinOp, ast.UnaryOp, ast.Compare, ast.Call,
@@ -61,7 +54,7 @@ FORBIDDEN_NAMES = {
 }
 
 # ENFORCED allowlist: the ONLY top-level names permitted in generated code.
-# Any Name node whose id is not in this set → rejected.
+# Any Name node whose id is not in this set is rejected.
 ALLOWED_ROOT_NAMES = {
     "df", "pd", "np", "result", "True", "False", "None",
     "len", "range", "list", "dict", "str", "int", "float", "bool",
@@ -70,7 +63,7 @@ ALLOWED_ROOT_NAMES = {
     "isinstance", "type",
 }
 
-# Pandas/numpy METHOD names that perform filesystem I/O — blocked at attribute level
+# Pandas/numpy METHOD names that perform filesystem I/O
 FORBIDDEN_METHODS = {
     "read_csv", "read_excel", "read_json", "read_html", "read_sql",
     "read_parquet", "read_feather", "read_pickle", "read_hdf",
@@ -80,7 +73,6 @@ FORBIDDEN_METHODS = {
     "save", "load", "dump", "dumps", "loads",
     "system", "popen", "spawn",
 }
-
 
 class _ASTValidator(ast.NodeVisitor):
     """Walks AST and collects violations."""
@@ -152,6 +144,28 @@ def _validate_ast(code: str) -> tuple:
     if v.errors:
         return False, "; ".join(v.errors[:3])
     return True, ""
+
+
+def _run_sandboxed_exec(code: str, df: pd.DataFrame, queue: mp.Queue):
+    """Execute code in a restricted globals dict and return result via queue."""
+    safe_globals = {
+        "__builtins__": {
+            "len": len, "range": range, "list": list, "dict": dict,
+            "str": str, "int": int, "float": float, "bool": bool,
+            "tuple": tuple, "set": set, "zip": zip, "enumerate": enumerate,
+            "map": map, "filter": filter, "sorted": sorted, "reversed": reversed,
+            "min": min, "max": max, "sum": sum, "abs": abs, "round": round,
+            "isinstance": isinstance, "type": type,
+        },
+        "pd": pd,
+        "np": np,
+        "df": df.copy(),
+    }
+    try:
+        exec(compile(code, "<chat>", "exec"), safe_globals)
+        queue.put({"success": True, "result": safe_globals.get("result"), "error": None})
+    except Exception as e:
+        queue.put({"success": False, "result": None, "error": str(e)})
 
 
 class ChatEngine:
@@ -238,45 +252,33 @@ Code:"""
         Issue fixes:
           - ALLOWED_ROOT_NAMES enforced (blocks pd.read_csv etc.)
           - FORBIDDEN_METHODS blocks I/O at attribute level
-          - threading.Timer kills execution after EXEC_TIMEOUT_SECONDS
+          - multiprocessing-based hard kill after EXEC_TIMEOUT_SECONDS
         """
         is_safe, reason = _validate_ast(code)
         if not is_safe:
             logger.warning(f"AST rejected: {reason}")
             return {"success": False, "result": None, "error": f"Code rejected: {reason}"}
 
-        safe_globals = {
-            "__builtins__": {
-                "len": len, "range": range, "list": list, "dict": dict,
-                "str": str, "int": int, "float": float, "bool": bool,
-                "tuple": tuple, "set": set, "zip": zip, "enumerate": enumerate,
-                "map": map, "filter": filter, "sorted": sorted, "reversed": reversed,
-                "min": min, "max": max, "sum": sum, "abs": abs, "round": round,
-                "isinstance": isinstance, "type": type,
-            },
-            "pd": pd,
-            "np": np,
-            "df": df.copy(),
-        }
+        ctx = mp.get_context("spawn")
+        queue = ctx.Queue()
+        proc = ctx.Process(target=_run_sandboxed_exec, args=(code, df, queue), daemon=True)
+        proc.start()
+        proc.join(timeout=EXEC_TIMEOUT_SECONDS)
 
-        outcome = {"success": False, "result": None, "error": "Timeout"}
-
-        def run():
-            try:
-                exec(compile(code, "<chat>", "exec"), safe_globals)
-                outcome["result"]  = safe_globals.get("result")
-                outcome["success"] = True
-                outcome["error"]   = None
-            except Exception as e:
-                outcome["error"] = str(e)
-
-        thread = threading.Thread(target=run, daemon=True)
-        thread.start()
-        thread.join(timeout=EXEC_TIMEOUT_SECONDS)
-
-        if thread.is_alive():
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(timeout=1)
             logger.warning(f"Chat code timed out after {EXEC_TIMEOUT_SECONDS}s")
-            outcome["error"] = f"Query took too long (>{EXEC_TIMEOUT_SECONDS}s). Try a simpler question."
+            return {
+                "success": False,
+                "result": None,
+                "error": f"Query took too long (>{EXEC_TIMEOUT_SECONDS}s). Try a simpler question.",
+            }
+
+        try:
+            outcome = queue.get(timeout=1)
+        except Exception:
+            outcome = {"success": False, "result": None, "error": "No result returned from sandbox"}
 
         return outcome
 
@@ -333,3 +335,5 @@ Code:"""
         if num_cols: ex.append(f"'What is the average {num_cols[0]}?'")
         if cat_cols: ex.append(f"'How many unique {cat_cols[0]} values?'")
         return {"answer": f"Could not generate code for that. Try: {' or '.join(ex[:2])}", "code": None, "result": None}
+
+

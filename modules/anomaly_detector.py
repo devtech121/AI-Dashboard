@@ -14,7 +14,7 @@ logger = logging.getLogger("ai_dashboard.anomaly_detector")
 class AnomalyDetector:
     """Detects statistical anomalies in numerical columns.
 
-    Issue #6: NOT decorated with @st.cache_data. app.py caches in st.session_state.
+    Not decorated with @st.cache_data; caller stores results per session.
     """
 
     def detect(self, df: pd.DataFrame, profile: dict) -> dict:
