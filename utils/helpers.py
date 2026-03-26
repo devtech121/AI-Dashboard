@@ -17,6 +17,12 @@ def setup_logging() -> logging.Logger:
             logging.StreamHandler(),
         ]
     )
+    # Silence noisy third-party loggers (PDF export / browser automation)
+    logging.getLogger("kaleido").setLevel(logging.WARNING)
+    logging.getLogger("choreographer").setLevel(logging.WARNING)
+    logging.getLogger("choreographer.browsers.chromium").setLevel(logging.WARNING)
+    logging.getLogger("choreographer.utils._tmpfile").setLevel(logging.WARNING)
+    logging.getLogger("choreographer.browser_async").setLevel(logging.WARNING)
     return logging.getLogger("ai_dashboard")
 
 

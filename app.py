@@ -56,9 +56,11 @@ def initialize_session_state():
         "file_processed": False,
         "processing_error": None,
         "selected_model": AppConfig.DEFAULT_MODEL,
+        "selected_chart_model": AppConfig.DEFAULT_MODEL,
         "sample_data_consent": False,
         "ai_analysis_cache": {},
         "custom_charts": [],
+        "chat_cache": {},
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -111,6 +113,17 @@ def render_sidebar(df: pd.DataFrame = None):
             help="Select AI model for analysis. Falls back automatically if unavailable."
         )
         st.session_state.selected_model = selected
+
+        # Chart model selection (separate from chat)
+        chart_selected = st.selectbox(
+            "Chart Model",
+            model_options,
+            index=model_options.index(st.session_state.selected_chart_model)
+            if st.session_state.selected_chart_model in model_options else 0,
+            format_func=lambda m: AppConfig.MODELS.get(m, {}).get("name", m),
+            help="Select AI model for chart JSON generation (separate from chat)."
+        )
+        st.session_state.selected_chart_model = chart_selected
 
         # Groq API Key input
         # Never pre-fill the value — keeps the key hidden even from the eye icon
@@ -353,13 +366,13 @@ def process_uploaded_file(uploaded_file):
         progress_bar.progress(52)
         include_samples = st.session_state.get("sample_data_consent", False)
         df_hash = compute_df_hash(df)
-        cache_key = f"{df_hash}:{st.session_state.selected_model}:{include_samples}"
+        cache_key = f"{df_hash}:{st.session_state.selected_chart_model}:{include_samples}"
         cache = st.session_state.get("ai_analysis_cache", {})
         if cache_key in cache:
             ai_analysis = cache[cache_key]
             logger.info("AI analysis cache hit")
         else:
-            ai_engine = AIEngine(model=st.session_state.selected_model)
+            ai_engine = AIEngine(model=st.session_state.selected_chart_model)
             ai_analysis = ai_engine.analyze(profile, include_sample_data=include_samples)
             cache[cache_key] = ai_analysis
             st.session_state.ai_analysis_cache = cache
@@ -444,7 +457,7 @@ def render_upload_section():
 
 def generate_custom_chart(question: str, df: pd.DataFrame, profile: dict):
     # Use the selected LLM to propose a single chart and build it.
-    ai = AIEngine(model=st.session_state.get("selected_model", AppConfig.DEFAULT_MODEL))
+    ai = AIEngine(model=st.session_state.get("selected_chart_model", AppConfig.DEFAULT_MODEL))
     cols = [c["name"] for c in profile.get("columns", [])]
     prompt = f"""Return ONLY valid JSON for ONE chart.
 No markdown. No explanation.
@@ -508,7 +521,8 @@ def render_audit_panel(profile: dict, ai_analysis: dict, df: pd.DataFrame):
     # Explainability panel: columns used and active filters.
     with st.expander("Audit / Explainability", expanded=False):
         cols = [c["name"] for c in profile.get("columns", [])]
-        st.markdown("**Model**: " + st.session_state.get("selected_model", AppConfig.DEFAULT_MODEL))
+        st.markdown("**Chat Model**: " + st.session_state.get("selected_model", AppConfig.DEFAULT_MODEL))
+        st.markdown("**Chart Model**: " + st.session_state.get("selected_chart_model", AppConfig.DEFAULT_MODEL))
         st.markdown("**Sample Rows Sent**: " + ("Yes" if st.session_state.get("sample_data_consent") else "No"))
         filters = st.session_state.get("active_filters", {})
         if filters:
@@ -627,6 +641,13 @@ def render_chat_section(df: pd.DataFrame):
             if "result" in msg:
                 if isinstance(msg["result"], pd.DataFrame):
                     st.dataframe(msg["result"], use_container_width=True)
+            if "evidence" in msg and msg.get("evidence") is not None:
+                with st.expander("Evidence"):
+                    ev = msg["evidence"]
+                    if isinstance(ev, pd.DataFrame):
+                        st.dataframe(ev, use_container_width=True)
+                    else:
+                        st.markdown(str(ev))
 
     # Chat input
     if prompt := st.chat_input("Ask anything about your data... (e.g., 'What is the average sales by region?')"):
@@ -637,12 +658,21 @@ def render_chat_section(df: pd.DataFrame):
 
         # Generate response
         with st.chat_message("assistant"):
-            with st.spinner("🤖 Analyzing your question..."):
-                response = chat_engine.ask(
-                    question=prompt,
-                    df=df,
-                    profile=st.session_state.profile
-                )
+            with st.spinner("Analyzing your question..."):
+                df_hash = compute_df_hash(df)
+                filters = st.session_state.get('active_filters', {})
+                cache_key = f"{df_hash}:{st.session_state.get('selected_model')}:{filters}:{prompt}"
+                chat_cache = st.session_state.get("chat_cache", {})
+                if cache_key in chat_cache:
+                    response = chat_cache[cache_key]
+                else:
+                    response = chat_engine.ask(
+                        question=prompt,
+                        df=df,
+                        profile=st.session_state.profile
+                    )
+                    chat_cache[cache_key] = response
+                    st.session_state.chat_cache = chat_cache
 
             # Stream the answer for a faster, more interactive feel
             try:
@@ -665,13 +695,21 @@ def render_chat_section(df: pd.DataFrame):
                     st.dataframe(result, use_container_width=True)
                 elif isinstance(result, (int, float)):
                     st.metric("Result", f"{result:,.4f}" if isinstance(result, float) else f"{result:,}")
+            if response.get("evidence") is not None:
+                with st.expander("Evidence"):
+                    ev = response["evidence"]
+                    if isinstance(ev, pd.DataFrame):
+                        st.dataframe(ev, use_container_width=True)
+                    else:
+                        st.markdown(str(ev))
 
         # Save to history
         st.session_state.chat_history.append({
             "role": "assistant",
             "content": response["answer"],
             "code": response.get("code", ""),
-            "result": response.get("result")
+            "result": response.get("result"),
+            "evidence": response.get("evidence")
         })
 
     # Clear chat button
@@ -679,6 +717,69 @@ def render_chat_section(df: pd.DataFrame):
         if st.button("🗑️ Clear Chat History", key="clear_chat"):
             st.session_state.chat_history = []
             st.rerun()
+
+
+def build_dashboard_pdf(charts: list, insights: list, profile: dict) -> bytes:
+    from io import BytesIO
+    from matplotlib.backends.backend_pdf import PdfPages
+    import matplotlib.pyplot as plt
+    import matplotlib.image as mpimg
+    import plotly.io as pio
+    import logging
+
+    logger = logging.getLogger("ai_dashboard.pdf_export")
+
+    try:
+        import kaleido  # noqa: F401
+    except Exception as e:
+        raise RuntimeError("PDF export requires kaleido. Please install it via requirements.txt.") from e
+
+    buffer = BytesIO()
+    title = 'AI Data Analyst Dashboard'
+    subtitle = f"{profile.get('row_count', 0):,} rows x {profile.get('column_count', 0)} columns"
+    insights = insights or []
+
+    with PdfPages(buffer) as pdf:
+        # Cover page with insights
+        fig = plt.figure(figsize=(8.27, 11.69))
+        fig.patch.set_facecolor('white')
+        ax = fig.add_axes([0, 0, 1, 1])
+        ax.axis('off')
+        fig.text(0.06, 0.94, title, fontsize=18, weight='bold')
+        fig.text(0.06, 0.91, subtitle, fontsize=11, color='#444444')
+        fig.text(0.06, 0.87, 'Insights', fontsize=14, weight='bold')
+        y = 0.84
+        for ins in insights[:12]:
+            fig.text(0.06, y, f"- {ins}", fontsize=10, color='#222222')
+            y -= 0.03
+            if y < 0.1:
+                break
+        pdf.savefig(fig)
+        plt.close(fig)
+
+        for chart in charts or []:
+            fig = plt.figure(figsize=(8.27, 11.69))
+            fig.patch.set_facecolor('white')
+            ax = fig.add_axes([0, 0, 1, 1])
+            ax.axis('off')
+            title = chart.get('title', 'Chart')
+            desc = chart.get('description', '')
+            fig.text(0.06, 0.95, title, fontsize=14, weight='bold')
+            if desc:
+                fig.text(0.06, 0.92, desc, fontsize=10, color='#444444')
+            try:
+                img_bytes = pio.to_image(chart.get('figure'), format='png', scale=2)
+                img = mpimg.imread(BytesIO(img_bytes), format='png')
+                ax_img = fig.add_axes([0.06, 0.1, 0.88, 0.78])
+                ax_img.axis('off')
+                ax_img.imshow(img)
+            except Exception as e:
+                logger.warning(f"Chart render failed: {e}")
+                fig.text(0.06, 0.75, f"Chart render failed: {e}", fontsize=9, color='#cc0000')
+            pdf.savefig(fig)
+            plt.close(fig)
+
+    return buffer.getvalue()
 
 
 def render_export_section(df: pd.DataFrame):
@@ -712,6 +813,24 @@ KPIs:
             mime="text/plain",
             use_container_width=True
         )
+
+        # Export dashboard as PDF (charts + insights)
+        charts = list(st.session_state.charts or [])
+        charts.extend(st.session_state.get("custom_charts", []))
+        try:
+            pdf_bytes = build_dashboard_pdf(charts, st.session_state.insights or [], profile)
+        except Exception as e:
+            pdf_bytes = None
+            st.warning(f"PDF build failed: {e}")
+        if pdf_bytes:
+            st.download_button(
+                "Download Dashboard PDF",
+                data=pdf_bytes,
+                file_name="ai_dashboard.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+
 
     with col2:
         # Export filtered data as CSV

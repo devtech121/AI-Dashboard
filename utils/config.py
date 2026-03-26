@@ -114,6 +114,24 @@ class AppConfig:
             "max_tokens": 4096,
             "temperature": 0.2,
         },
+        "llama-3.3-70b-versatile": {
+            "name": "Llama 3.3 70B Versatile",
+            "provider": "groq",
+            "max_tokens": 32768,
+            "temperature": 0.2,
+        },
+        "llama-3.1-8b-instant": {
+            "name": "Llama 3.1 8B Instant",
+            "provider": "groq",
+            "max_tokens": 131072,
+            "temperature": 0.2,
+        },
+        "meta-llama/llama-4-scout-17b-16e-instruct": {
+            "name": "Llama 4 Scout 17B 16E (Vision)",
+            "provider": "groq",
+            "max_tokens": 8192,
+            "temperature": 0.2,
+        },
         "qwen/qwen3-32b": {
             "name": "Qwen3 32B Balanced",
             "provider": "groq",
@@ -135,7 +153,12 @@ class AppConfig:
     }
 
     DEFAULT_MODEL: str = "openai/gpt-oss-120b"
-    FALLBACK_ORDER: list = list(MODELS.keys())
+    FALLBACK_ORDER: list = [
+        "openai/gpt-oss-120b",
+        "llama-3.3-70b-versatile",
+        "qwen/qwen3-32b",
+        "llama-3.1-8b-instant",
+    ]
 
     # Data Profiling
     SAMPLE_SIZE_FOR_AI: int = 5
