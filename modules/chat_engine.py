@@ -11,6 +11,7 @@ import multiprocessing as mp
 import pandas as pd
 import numpy as np
 import difflib
+import re
 from utils.config import AppConfig
 
 logger = logging.getLogger("ai_dashboard.chat_engine")
@@ -180,6 +181,12 @@ class ChatEngine:
         rule = self._rule_based_order_lookup(question, df, profile)
         if rule:
             return rule
+        rule = self._rule_based_category_count(question, df, profile)
+        if rule:
+            return rule
+        rule = self._rule_based_return_count(question, df, profile)
+        if rule:
+            return rule
         col_ctx = self._build_column_context(profile)
         candidates = self._map_question_to_columns(question, profile)
         if self._needs_clarification(question, candidates, profile):
@@ -200,28 +207,46 @@ class ChatEngine:
             result = self._safe_execute(code, df)
             if result["success"]:
                 evidence = self._build_evidence(result["result"])
+                auto_explain = self._build_auto_explain(question, result["result"], spec, df, profile)
+                corrected = self._semantic_correction(question, result["result"], df, profile, spec)
+                if corrected:
+                    return corrected
                 if spec and not self._validate_result_against_spec(result["result"], spec):
                     fixed = self._repair_code(question, df, profile, col_ctx, spec, code)
                     if fixed:
                         result2 = self._safe_execute(fixed, df)
                         if result2["success"]:
+                            auto_explain2 = self._build_auto_explain(question, result2["result"], spec, df, profile)
                             return {
-                                "answer": self._format_answer(question, result2["result"], fixed),
+                                "answer": self._format_answer(question, result2["result"], fixed) + (f"\n\n{auto_explain2}" if auto_explain2 else ""),
                                 "code": fixed,
                                 "result": result2["result"],
                                 "evidence": self._build_evidence(result2["result"]),
+                                "confidence": 0.6,
+                                "source": "llm-repaired",
+                                "confidence_reason": "LLM result repaired to match spec",
                             }
                 return {
-                    "answer": self._format_answer(question, result["result"], code),
+                    "answer": self._format_answer(question, result["result"], code) + (f"\n\n{auto_explain}" if auto_explain else ""),
                     "code": code,
                     "result": result["result"],
                     "evidence": evidence,
+                    "confidence": 0.7 if spec else 0.6,
+                    "source": "llm",
+                    "confidence_reason": "LLM-generated code executed successfully",
                 }
             logger.warning(f"Exec failed: {result['error']}")
             fallback = self._rule_based_answer(question, df, profile)
             if fallback:
+                fallback["confidence"] = 0.5
+                fallback["source"] = "rule-fallback"
+                fallback["confidence_reason"] = "Rule-based fallback"
                 return fallback
-        return self._general_fallback(question, df, profile)
+        fb = self._general_fallback(question, df, profile)
+        fb["confidence"] = 0.2
+        fb["source"] = "fallback"
+        fb["confidence_reason"] = "Could not infer a safe computation"
+        return fb
 
     # ── Code Generation ────────────────────────────────────────
 
@@ -238,6 +263,259 @@ class ChatEngine:
                     line += f" values={top}"
             lines.append(line)
         return "\n".join(lines)
+
+    def _is_numeric_col(self, col: str, profile: dict) -> bool:
+        num_cols = set(profile.get("numerical_cols", []))
+        return col in num_cols
+
+    def _build_auto_explain(self, question: str, result, spec: dict, df: pd.DataFrame, profile: dict) -> str | None:
+        try:
+            if isinstance(result, pd.DataFrame):
+                cols_lower = [c.lower() for c in result.columns]
+                if "count" in cols_lower:
+                    count_col = result.columns[cols_lower.index("count")]
+                    total = result[count_col].sum()
+                    if total and len(result) >= 1:
+                        top_n = min(5, len(result))
+                        top_share = result[count_col].head(top_n).sum() / total * 100
+                        return f"Top {top_n} categories account for about {top_share:.1f}% of all records."
+        except Exception:
+            return None
+        return None
+
+    def _semantic_correction(self, question: str, result, df: pd.DataFrame, profile: dict, spec: dict):
+        # If the question implies a deterministic count table but result isn't one, override.
+        try:
+            if self._looks_like_category_count(question):
+                if not self._is_count_table(result):
+                    rule = self._rule_based_category_count(question, df, profile)
+                    if rule:
+                        rule["confidence_reason"] = "Rule-based override: count intent detected"
+                        return rule
+            if spec and spec.get("aggregation") in ("sum", "mean", "min", "max"):
+                if not self._result_is_numeric(result):
+                    fixed = self._deterministic_aggregate(df, spec)
+                    if fixed:
+                        fixed["confidence_reason"] = "Deterministic aggregate override for numeric accuracy"
+                        return fixed
+        except Exception:
+            pass
+        return None
+
+    def _result_is_numeric(self, result) -> bool:
+        if isinstance(result, (int, float, np.integer, np.floating)):
+            return True
+        if isinstance(result, pd.Series):
+            return result.dtype.kind in "if"
+        if isinstance(result, pd.DataFrame):
+            return len(result.select_dtypes(include=["number"]).columns) > 0
+        return False
+
+    def _deterministic_aggregate(self, df: pd.DataFrame, spec: dict) -> dict | None:
+        try:
+            target_cols = spec.get("target_columns") or []
+            groupby = spec.get("groupby") or []
+            agg = spec.get("aggregation")
+            if not target_cols:
+                return None
+            col = target_cols[0]
+            if groupby:
+                gcol = groupby[0]
+                agg_df = getattr(df.groupby(gcol)[col], agg)().reset_index()
+                agg_df.columns = [gcol, col]
+                return {
+                    "answer": f"Found {len(agg_df):,} group(s) with {agg} for {col}.",
+                    "code": f"result = df.groupby('{gcol}')['{col}'].{agg}().reset_index()",
+                    "result": agg_df,
+                    "evidence": agg_df.head(5),
+                    "confidence": 0.85,
+                    "source": "rule",
+                    "confidence_reason": "Deterministic aggregate override for numeric accuracy",
+                }
+            val = getattr(df[col], agg)()
+            return {
+                "answer": f"**Answer:** {val:,.4f}" if isinstance(val, float) else f"**Answer:** {val:,}",
+                "code": f"result = df['{col}'].{agg}()",
+                "result": val,
+                "evidence": None,
+                "confidence": 0.85,
+                "source": "rule",
+                "confidence_reason": "Deterministic aggregate override for numeric accuracy",
+            }
+        except Exception:
+            return None
+
+
+    def _looks_like_category_count(self, question: str) -> bool:
+        if not question:
+            return False
+        q = question.lower()
+        patterns = [
+            r"\bhow many\b.*\bcount\b",
+            r"\bhow many\b.*\bdifferent\b",
+            r"\bcount\b.*\bby\b",
+            r"\bdistribution\b",
+            r"\btheir count\b",
+        ]
+        return any(re.search(p, q) for p in patterns)
+
+    def _is_count_table(self, result) -> bool:
+        if isinstance(result, pd.DataFrame):
+            cols_lower = [c.lower() for c in result.columns]
+            return any(c in cols_lower for c in ["count", "counts", "n", "num"])
+        return False
+
+    def _parse_numeric_value(self, raw: str) -> float | None:
+        if raw is None:
+            return None
+        s = str(raw).strip().lower().replace(",", "")
+        s = re.sub(r"[$\u20b9\u20ac\u00a3]", "", s)
+        mult = 1.0
+        if s.endswith("k"):
+            mult = 1_000.0
+            s = s[:-1]
+        elif s.endswith("m"):
+            mult = 1_000_000.0
+            s = s[:-1]
+        elif s.endswith("b"):
+            mult = 1_000_000_000.0
+            s = s[:-1]
+        try:
+            return float(s) * mult
+        except Exception:
+            return None
+
+    def _rank_columns(self, question: str, profile: dict) -> list:
+        if not question:
+            return []
+        q = question.lower()
+        cols = [c.get("name") for c in profile.get("columns", []) if c.get("name")]
+        synonyms = {
+            "revenue": ["sales", "turnover"],
+            "sales": ["revenue", "turnover"],
+            "amount": ["total", "sum", "value"],
+            "price": ["cost", "amount", "value"],
+            "profit": ["margin", "earnings"],
+            "quantity": ["qty", "volume", "count"],
+            "brand": ["make", "manufacturer"],
+            "make": ["brand", "manufacturer"],
+            "model": ["variant", "trim"],
+            "date": ["time", "day", "month", "year", "quarter"],
+            "customer": ["client", "buyer", "user"],
+            "product": ["item", "sku"],
+            "category": ["type", "segment", "group", "class"],
+            "region": ["state", "country", "area", "zone"],
+            "payment": ["method", "payment_method"],
+        }
+        q_tokens = [t for t in re.split(r"\W+", q) if len(t) >= 3]
+        scored = []
+        for c in cols:
+            cl = c.lower()
+            score = 0.0
+            if cl in q:
+                score += 3.0
+            parts = cl.replace("-", " ").replace("_", " ").split()
+            score += sum(1.0 for p in parts if p in q_tokens)
+            for key, syns in synonyms.items():
+                if key in cl and any(s in q for s in syns + [key]):
+                    score += 2.0
+            for t in q_tokens[:6]:
+                score += difflib.SequenceMatcher(None, t, cl).ratio() * 0.5
+            scored.append((score, c))
+        scored.sort(reverse=True, key=lambda x: x[0])
+        return [c for s, c in scored if s > 0.2]
+
+    def _column_type_map(self, profile: dict) -> dict:
+        return {c.get("name"): c.get("type") for c in profile.get("columns", []) if c.get("name")}
+
+    def _rule_based_category_count(self, question: str, df: pd.DataFrame, profile: dict) -> dict | None:
+        if not question:
+            return None
+        q = question.lower()
+        import re
+        count_patterns = [
+            r"\bhow many\b.*\bcount\b",
+            r"\bhow many\b.*\bdifferent\b",
+            r"\bcount\b.*\bby\b",
+            r"\bdistribution\b",
+            r"\btheir count\b",
+        ]
+        if not any(re.search(p, q) for p in count_patterns):
+            return None
+
+        cat_cols = profile.get("categorical_cols", [])
+        type_map = self._column_type_map(profile)
+        candidates = self._map_question_to_columns(question, profile)
+
+        # Prefer explicit categorical candidates
+        for c in candidates:
+            if type_map.get(c) == "categorical":
+                return self._build_count_response(df, c)
+
+        # Synonym-based match for common category terms
+        synonyms = {
+            "brand": ["brand", "make", "manufacturer"],
+            "model": ["model", "variant"],
+            "category": ["category", "type", "segment", "class"],
+            "region": ["region", "state", "country", "area", "zone"],
+            "payment": ["payment", "payment_method", "method"],
+            "product": ["product", "item", "sku"],
+        }
+        for col in cat_cols:
+            cl = col.lower()
+            for _, syns in synonyms.items():
+                if any(s in q for s in syns) and any(s in cl for s in syns):
+                    return self._build_count_response(df, col)
+
+        # Fallback: first categorical column
+        if cat_cols:
+            return self._build_count_response(df, cat_cols[0])
+        return None
+
+    def _rule_based_return_count(self, question: str, df: pd.DataFrame, profile: dict) -> dict | None:
+        if not question:
+            return None
+        q = question.lower()
+        if not any(k in q for k in ["return", "returned", "returns"]):
+            return None
+        cols = [c.get("name") for c in profile.get("columns", []) if c.get("name")]
+        # Prefer explicit 'returned' or 'return' boolean/binary columns
+        candidates = [c for c in cols if "return" in c.lower()]
+        if not candidates:
+            return None
+        col = candidates[0]
+        try:
+            series = df[col]
+            if series.dtype.kind in {"i", "u", "f"}:
+                count_val = int((series == 1).sum())
+                code = f"result = (df['{col}'] == 1).sum()"
+            else:
+                count_val = int((series == True).sum())  # noqa: E712
+                code = f"result = (df['{col}'] == True).sum()"
+            return {
+                "answer": f"**Returned orders:** {count_val:,}",
+                "code": code,
+                "result": count_val,
+                "evidence": None,
+                "confidence": 0.95,
+                "source": "rule",
+                "confidence_reason": "Rule-based deterministic answer",
+            }
+        except Exception:
+            return None
+
+    def _build_count_response(self, df: pd.DataFrame, col: str) -> dict:
+        vc = df[col].value_counts(dropna=False).reset_index()
+        vc.columns = [col, "count"]
+        return {
+            "answer": f"Found {len(vc):,} unique {col} values with counts.\n\nTop 5 categories account for about {(vc['count'].head(5).sum() / vc['count'].sum() * 100):.1f}% of all records.",
+            "code": f"result = df['{col}'].value_counts(dropna=False).reset_index().rename(columns={{'index':'{col}', '{col}':'count'}})",
+            "result": vc,
+            "evidence": vc.head(5),
+            "confidence": 0.95,
+            "source": "rule",
+            "confidence_reason": "Rule-based deterministic answer",
+        }
 
     def _needs_clarification(self, question: str, candidates: list, profile: dict) -> bool:
         if not question or len(candidates) < 2:
@@ -288,12 +566,18 @@ class ChatEngine:
                     "code": code,
                     "result": result_df,
                     "evidence": None,
+                    "confidence": 0.95,
+                    "source": "rule",
+                    "confidence_reason": "Rule-based deterministic answer",
                 }
             return {
                 "answer": f"Found {len(result_df):,} record(s) for `{col}` = {val}.",
                 "code": code,
                 "result": result_df,
                 "evidence": result_df.head(5),
+                "confidence": 0.95,
+                "source": "rule",
+                "confidence_reason": "Rule-based deterministic answer",
             }
         except Exception as e:
             logger.warning(f"Order lookup failed: {e}")
@@ -326,57 +610,7 @@ class ChatEngine:
         return None, None
 
     def _map_question_to_columns(self, question: str, profile: dict) -> list:
-        if not question:
-            return []
-        q = question.lower()
-        cols = [c.get("name") for c in profile.get("columns", []) if c.get("name")]
-        col_lowers = {c.lower(): c for c in cols}
-        hits = []
-
-        for c in cols:
-            cl = c.lower()
-            if cl in q:
-                hits.append(c)
-                continue
-            parts = cl.replace("-", " ").replace("_", " ").split()
-            if any(p and p in q for p in parts):
-                hits.append(c)
-
-        synonyms = {
-            "revenue": ["sales", "turnover"],
-            "sales": ["revenue", "turnover"],
-            "amount": ["total", "sum"],
-            "price": ["cost", "amount", "value"],
-            "profit": ["margin", "earnings"],
-            "quantity": ["qty", "volume", "count"],
-            "date": ["time", "day", "month", "year"],
-            "customer": ["client", "buyer", "user"],
-            "product": ["item", "sku"],
-            "category": ["type", "segment", "group"],
-            "region": ["state", "country", "area", "zone"],
-            "department": ["team", "function", "division"],
-            "age": ["years", "dob"],
-            "gender": ["sex"],
-        }
-        for col in cols:
-            cl = col.lower()
-            for key, syns in synonyms.items():
-                if key in cl and any(s in q for s in syns + [key]):
-                    hits.append(col)
-
-        q_tokens = [t for t in q.replace("?", " ").replace(",", " ").split() if len(t) >= 3]
-        for t in q_tokens[:6]:
-            close = difflib.get_close_matches(t, list(col_lowers.keys()), n=1, cutoff=0.8)
-            if close:
-                hits.append(col_lowers[close[0]])
-
-        seen = set()
-        out = []
-        for h in hits:
-            if h not in seen:
-                seen.add(h)
-                out.append(h)
-        return out[:6]
+        return self._rank_columns(question, profile)[:6]
 
     def _generate_query_spec(
         self,
@@ -412,6 +646,7 @@ Schema:
   "operation": "aggregate|list|filter|describe|other",
   "target_columns": ["col1","col2"],
   "groupby": ["col_or_empty"],
+  "aggregation": "count|sum|mean|max|min|none",
   "filters": [{{"column":"col","op":"==|!=|>|>=|<|<=|contains|in","value":"..."}}],
   "sort": {{"column":"col_or_empty","order":"asc|desc"}},
   "limit": 0,
@@ -423,7 +658,7 @@ Schema:
             spec = self._extract_json(raw)
             if not isinstance(spec, dict):
                 return None
-            return self._sanitize_spec(spec, cols, candidates, hints)
+            return self._sanitize_spec(spec, cols, candidates, hints, profile)
         except Exception as e:
             logger.warning(f"Spec generation failed: {e}")
             return None
@@ -451,7 +686,7 @@ Schema:
                 return None
         return None
 
-    def _sanitize_spec(self, spec: dict, valid_cols: list, candidates: list, hints: dict) -> dict | None:
+    def _sanitize_spec(self, spec: dict, valid_cols: list, candidates: list, hints: dict, profile: dict) -> dict | None:
         if not isinstance(spec, dict):
             return None
         def _clean_cols(cols):
@@ -462,6 +697,10 @@ Schema:
             return out
         spec["target_columns"] = _clean_cols(spec.get("target_columns", []))
         spec["groupby"] = _clean_cols(spec.get("groupby", []))
+        agg = spec.get("aggregation", "none")
+        if agg in ("sum", "mean", "min", "max"):
+            num_cols = set(profile.get("numerical_cols", []))
+            spec["target_columns"] = [c for c in spec["target_columns"] if c in num_cols]
         filt = []
         for f in spec.get("filters", []) or []:
             col = f.get("column")
@@ -479,6 +718,8 @@ Schema:
                 spec["limit"] = hints["limit"]
             if (not spec.get("sort") or not spec["sort"].get("column")) and hints.get("sort"):
                 spec["sort"] = hints["sort"]
+            if hints.get("aggregation") and (not spec.get("aggregation") or spec.get("aggregation") == "none"):
+                spec["aggregation"] = hints["aggregation"]
         if not spec["target_columns"] and candidates:
             spec["target_columns"] = [c for c in candidates if c in valid_cols][:2]
         if not spec["target_columns"]:
@@ -489,11 +730,21 @@ Schema:
         if not question:
             return {}
         q = question.lower()
-        hints = {"filters": [], "sort": {"column": "", "order": "asc"}, "limit": 0}
+        hints = {"filters": [], "sort": {"column": "", "order": "asc"}, "limit": 0, "aggregation": "none"}
         cols = [c.get("name") for c in profile.get("columns", []) if c.get("name")]
         col_types = {c.get("name"): c.get("type") for c in profile.get("columns", [])}
 
         import re
+        if any(w in q for w in ["average", "avg", "mean"]):
+            hints["aggregation"] = "mean"
+        elif any(w in q for w in ["sum", "total", "overall total"]):
+            hints["aggregation"] = "sum"
+        elif any(w in q for w in ["max", "maximum", "highest"]):
+            hints["aggregation"] = "max"
+        elif any(w in q for w in ["min", "minimum", "lowest"]):
+            hints["aggregation"] = "min"
+        elif any(w in q for w in ["count", "how many", "number of"]):
+            hints["aggregation"] = "count"
         m = re.search(r"\btop\s+(\d+)", q)
         if m:
             hints["limit"] = int(m.group(1))
@@ -503,14 +754,14 @@ Schema:
             hints["limit"] = int(m.group(2))
             hints["sort"]["order"] = "asc"
 
-        # Numeric comparisons
+        # Numeric comparisons (currency + K/M/B)
         comp_map = {
-            r"\bgreater than\s+(-?\d+\.?\d*)": ">",
-            r"\bmore than\s+(-?\d+\.?\d*)": ">",
-            r"\bover\s+(-?\d+\.?\d*)": ">",
-            r"\bless than\s+(-?\d+\.?\d*)": "<",
-            r"\bunder\s+(-?\d+\.?\d*)": "<",
-            r"\bbetween\s+(-?\d+\.?\d*)\s+and\s+(-?\d+\.?\d*)": "between",
+            r"\bgreater than\s+([\$₹€£]?\s*-?\d[\d,\.]*\s*[kmb]?)": ">",
+            r"\bmore than\s+([\$₹€£]?\s*-?\d[\d,\.]*\s*[kmb]?)": ">",
+            r"\bover\s+([\$₹€£]?\s*-?\d[\d,\.]*\s*[kmb]?)": ">",
+            r"\bless than\s+([\$₹€£]?\s*-?\d[\d,\.]*\s*[kmb]?)": "<",
+            r"\bunder\s+([\$₹€£]?\s*-?\d[\d,\.]*\s*[kmb]?)": "<",
+            r"\bbetween\s+([\$₹€£]?\s*-?\d[\d,\.]*\s*[kmb]?)\s+and\s+([\$₹€£]?\s*-?\d[\d,\.]*\s*[kmb]?)": "between",
         }
         target_col = None
         for c in candidates:
@@ -526,26 +777,56 @@ Schema:
             m = re.search(pat, q)
             if m and target_col:
                 if op == "between":
-                    hints["filters"].append({"column": target_col, "op": ">=", "value": m.group(1)})
-                    hints["filters"].append({"column": target_col, "op": "<=", "value": m.group(2)})
+                    v1 = self._parse_numeric_value(m.group(1))
+                    v2 = self._parse_numeric_value(m.group(2))
+                    if v1 is not None and v2 is not None:
+                        hints["filters"].append({"column": target_col, "op": ">=", "value": v1})
+                        hints["filters"].append({"column": target_col, "op": "<=", "value": v2})
                 else:
-                    hints["filters"].append({"column": target_col, "op": op, "value": m.group(1)})
+                    v = self._parse_numeric_value(m.group(1))
+                    if v is not None:
+                        hints["filters"].append({"column": target_col, "op": op, "value": v})
                 break
 
-        # Last N days for datetime columns
-        m = re.search(r"\blast\s+(\d+)\s+days\b", q)
+        # Date ranges for datetime columns
         dt_cols = profile.get("datetime_cols", [])
-        if m and dt_cols:
-            try:
-                days = int(m.group(1))
-                dt_col = dt_cols[0]
-                series = pd.to_datetime(df[dt_col], errors="coerce").dropna()
-                if len(series) > 0:
-                    max_dt = series.max()
+        if dt_cols:
+            dt_col = dt_cols[0]
+            series = pd.to_datetime(df[dt_col], errors="coerce").dropna()
+            if len(series) > 0:
+                max_dt = series.max()
+                # last N days
+                m = re.search(r"\blast\s+(\d+)\s+days\b", q)
+                if m:
+                    days = int(m.group(1))
                     cutoff = (max_dt - pd.Timedelta(days=days)).date().isoformat()
                     hints["filters"].append({"column": dt_col, "op": ">=", "value": cutoff})
-            except Exception:
-                pass
+                # last year
+                if "last year" in q:
+                    start = pd.Timestamp(max_dt.year - 1, 1, 1).date().isoformat()
+                    end = pd.Timestamp(max_dt.year - 1, 12, 31).date().isoformat()
+                    hints["filters"].append({"column": dt_col, "op": ">=", "value": start})
+                    hints["filters"].append({"column": dt_col, "op": "<=", "value": end})
+                # last quarter
+                if "last quarter" in q:
+                    qtr = (max_dt.month - 1) // 3 + 1
+                    last_qtr = qtr - 1 or 4
+                    year = max_dt.year if qtr > 1 else max_dt.year - 1
+                    start_month = 3 * (last_qtr - 1) + 1
+                    start = pd.Timestamp(year, start_month, 1).date().isoformat()
+                    end = (pd.Timestamp(year, start_month, 1) + pd.offsets.QuarterEnd()).date().isoformat()
+                    hints["filters"].append({"column": dt_col, "op": ">=", "value": start})
+                    hints["filters"].append({"column": dt_col, "op": "<=", "value": end})
+                # Q1 2024 style
+                m = re.search(r"\bq([1-4])\s*(\d{4})\b", q)
+                if m:
+                    qn = int(m.group(1))
+                    year = int(m.group(2))
+                    start_month = 3 * (qn - 1) + 1
+                    start = pd.Timestamp(year, start_month, 1).date().isoformat()
+                    end = (pd.Timestamp(year, start_month, 1) + pd.offsets.QuarterEnd()).date().isoformat()
+                    hints["filters"].append({"column": dt_col, "op": ">=", "value": start})
+                    hints["filters"].append({"column": dt_col, "op": "<=", "value": end})
 
         # Sort hint based on phrasing "by <col>"
         m = re.search(r"\bby\s+([a-zA-Z0-9_ -]+)$", q)
@@ -598,12 +879,29 @@ Code:"""
         if not spec:
             return True
         expected = spec.get("output", "table")
+        agg = spec.get("aggregation", "none")
         if expected == "scalar":
+            if agg in ("sum", "mean", "min", "max"):
+                return isinstance(result, (int, float, np.integer, np.floating))
             return isinstance(result, (int, float, np.integer, np.floating, str))
         if expected == "series":
-            return isinstance(result, pd.Series)
+            if isinstance(result, pd.Series):
+                if agg in ("sum", "mean", "min", "max"):
+                    return result.dtype.kind in "if"
+                return True
+            return False
         if expected == "table":
-            return isinstance(result, (pd.DataFrame, pd.Series))
+            if not isinstance(result, (pd.DataFrame, pd.Series)):
+                return False
+            if agg == "count" and isinstance(result, pd.DataFrame):
+                cols_lower = [c.lower() for c in result.columns]
+                if not any(c in cols_lower for c in ["count", "counts", "n", "num"]):
+                    return False
+            if agg in ("sum", "mean", "min", "max") and isinstance(result, pd.DataFrame):
+                numeric_cols = result.select_dtypes(include=["number"]).columns
+                if len(numeric_cols) == 0:
+                    return False
+            return True
         return True
 
     def _repair_code(

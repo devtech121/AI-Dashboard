@@ -635,6 +635,11 @@ def render_chat_section(df: pd.DataFrame):
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
+            if msg.get("confidence") is not None:
+                src = msg.get("source", "")
+                reason = msg.get("confidence_reason", "")
+                suffix = f" | {reason}" if reason else ""
+                st.caption(f"Confidence: {msg['confidence']:.2f} | Source: {src}{suffix}")
             if "code" in msg:
                 with st.expander("🔍 Generated Code"):
                     st.code(msg["code"], language="python")
@@ -685,6 +690,12 @@ def render_chat_section(df: pd.DataFrame):
             except Exception:
                 st.markdown(response["answer"])
 
+            if response.get("confidence") is not None:
+                src = response.get("source", "")
+                reason = response.get("confidence_reason", "")
+                suffix = f" | {reason}" if reason else ""
+                st.caption(f"Confidence: {response['confidence']:.2f} | Source: {src}{suffix}")
+
             if response.get("code"):
                 with st.expander("🔍 Generated Code"):
                     st.code(response["code"], language="python")
@@ -709,7 +720,10 @@ def render_chat_section(df: pd.DataFrame):
             "content": response["answer"],
             "code": response.get("code", ""),
             "result": response.get("result"),
-            "evidence": response.get("evidence")
+            "evidence": response.get("evidence"),
+            "confidence": response.get("confidence"),
+            "source": response.get("source"),
+            "confidence_reason": response.get("confidence_reason")
         })
 
     # Clear chat button
